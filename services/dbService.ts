@@ -219,11 +219,16 @@ const localDb = {
       await delay(500);
       const exams = JSON.parse(localStorage.getItem(STORAGE_KEYS.EXAMS) || '[]');
       const results = JSON.parse(localStorage.getItem(STORAGE_KEYS.RESULTS) || '[]');
+      // In local mode, we just simulate '1' online user (the current one)
       return {
           activeExams: exams.filter((e: any) => e.isActive).length,
           completedStudents: results.length,
-          onlineStudents: Math.floor(Math.random() * 30) + 10
+          onlineStudents: 1 
       };
+  },
+
+  sendHeartbeat: async (user: User) => {
+      // In Mock mode, do nothing
   },
 
   exportDatabase: async () => {},
@@ -284,6 +289,20 @@ const apiDb = {
   },
   getExamStats: async (examId: string) => apiRequest<any>(`/analytics.php?action=exam_stats&examId=${examId}`),
   getGlobalStats: async () => apiRequest<any>('/analytics.php?action=global_stats'),
+  
+  // Realtime Heartbeat
+  sendHeartbeat: async (user: User) => {
+      if (user.role === Role.STUDENT) {
+        await apiRequest('/analytics.php', { 
+            method: 'POST', 
+            body: JSON.stringify({ 
+                action: 'heartbeat', 
+                studentName: user.fullName || user.username, 
+                className: user.className 
+            }) 
+        });
+      }
+  },
 
   exportDatabase: async () => alert("Gunakan phpMyAdmin untuk export."),
   importDatabase: async () => alert("Gunakan phpMyAdmin untuk import."),

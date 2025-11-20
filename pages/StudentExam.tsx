@@ -21,6 +21,24 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const [inputToken, setInputToken] = useState('');
   const [tokenError, setTokenError] = useState('');
 
+  // --- Heartbeat System (Realtime Online Status) ---
+  useEffect(() => {
+    const sendSignal = async () => {
+        try {
+            await db.sendHeartbeat(user);
+        } catch(e) {
+            // Ignore heartbeat errors silently
+        }
+    };
+    
+    // Send immediately on load
+    sendSignal();
+
+    // Send every 30 seconds
+    const interval = setInterval(sendSignal, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   // Function to fetch and filter exams
   const fetchExams = async () => {
     try {
@@ -302,6 +320,15 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number) =>
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+  
+  // Exam Room also sends heartbeats
+  useEffect(() => {
+    const sendSignal = async () => {
+        try { await db.sendHeartbeat(user); } catch(e) {}
+    };
+    const interval = setInterval(sendSignal, 30000); // 30s
+    return () => clearInterval(interval);
+  }, [user]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
