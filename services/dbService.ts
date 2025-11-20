@@ -1,12 +1,10 @@
 import { Exam, ExamResult, ClassGroup, User, Role, Question, ExamPackage } from '../types';
 
 // ============================================================================
-// KONFIGURASI DATABASE
-// Ubah 'false' menjadi 'true' HANYA jika Anda sudah:
-// 1. Install XAMPP (Apache & MySQL nyala)
-// 2. Import database.sql di phpMyAdmin
-// 3. Menyalin folder 'dist' ke 'htdocs'
+// KONFIGURASI DATABASE (MODE ONLINE)
 // ============================================================================
+// Set ke 'true' untuk menggunakan Database MySQL (Production/Server)
+// Set ke 'false' untuk mode Simulasi/Offline (Tanpa Server)
 const USE_API_BACKEND = false; 
 const API_BASE_URL = './api'; 
 
@@ -22,7 +20,7 @@ const STORAGE_KEYS = {
   RESULTS: 'exambit_results'
 };
 
-// Initialize Mock Data if empty
+// Initialize Mock Data if empty (Only runs if accessed directly, harmless in API mode)
 try {
     if (!localStorage.getItem(STORAGE_KEYS.CLASSES)) {
         localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify([
