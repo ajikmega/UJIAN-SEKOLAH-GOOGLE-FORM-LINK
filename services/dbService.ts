@@ -1,13 +1,14 @@
-
 import { Exam, ExamResult, ClassGroup, User, Role, Question, ExamPackage } from '../types';
 
 // ============================================================================
 // KONFIGURASI DATABASE
-// Ubah 'false' menjadi 'true' jika Anda sudah menyiapkan Backend PHP & MySQL.
-// Saat 'false', aplikasi menggunakan penyimpanan browser (LocalStorage).
+// Ubah 'false' menjadi 'true' HANYA jika Anda sudah:
+// 1. Install XAMPP (Apache & MySQL nyala)
+// 2. Import database.sql di phpMyAdmin
+// 3. Menyalin folder 'dist' ke 'htdocs'
 // ============================================================================
-const USE_API_BACKEND = true;
-const API_BASE_URL = (process.env.API_BASE_URL as string) || 'http://localhost/api'; 
+const USE_API_BACKEND = false; 
+const API_BASE_URL = './api'; 
 
 // --- HELPER & UTILS ---
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -22,24 +23,25 @@ const STORAGE_KEYS = {
 };
 
 // Initialize Mock Data if empty
-if (!localStorage.getItem(STORAGE_KEYS.CLASSES)) {
-    localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify([
-        { id: 'c1', name: 'X-MIPA-1' }, { id: 'c2', name: 'X-MIPA-2' }, { id: 'c3', name: 'XII-IPA-1' }
-    ]));
+try {
+    if (!localStorage.getItem(STORAGE_KEYS.CLASSES)) {
+        localStorage.setItem(STORAGE_KEYS.CLASSES, JSON.stringify([
+            { id: 'c1', name: 'X-MIPA-1' }, { id: 'c2', name: 'X-MIPA-2' }, { id: 'c3', name: 'XII-IPA-1' }
+        ]));
+    }
+} catch (e) {
+    console.error("LocalStorage access denied", e);
 }
 
 // --- 1. LOCAL STORAGE IMPLEMENTATION (MOCK / OFFLINE) ---
 const localDb = {
   login: async (identifier: string, credential: string, role: Role): Promise<User | null> => {
-    await delay(800);
+    await delay(500);
     if (role === Role.ADMIN) {
-       // Admin: identifier = username, credential = password
-       // Accept any password for demo purposes if username is admin
        if (identifier.toLowerCase() === 'admin') {
            return { id: 'admin-1', username: identifier, role: Role.ADMIN, fullName: 'Administrator' };
        }
     } else {
-       // Student: identifier = Name, credential = Class
        if (identifier && credential) {
            return { 
                id: `stu-${Date.now()}`, 
@@ -89,7 +91,7 @@ const localDb = {
     localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(list.filter((q: any) => q.id !== id)));
   },
 
-  // Packages
+  // Packages (Not used in Form mode, but kept for types)
   getPackages: async (): Promise<ExamPackage[]> => {
     await delay(300);
     return JSON.parse(localStorage.getItem(STORAGE_KEYS.PACKAGES) || '[]');
@@ -148,7 +150,6 @@ const localDb = {
   submitExam: async (result: ExamResult) => {
     await delay(800);
     const list = JSON.parse(localStorage.getItem(STORAGE_KEYS.RESULTS) || '[]');
-    // Replace if exists (re-submit) or add new
     const existingIdx = list.findIndex((r: any) => r.examId === result.examId && r.studentName === result.studentName);
     if (existingIdx >= 0) {
         list[existingIdx] = result;
@@ -160,7 +161,7 @@ const localDb = {
 
   // Stats & Sync
   syncGoogleFormResults: async (examId: string): Promise<number> => {
-    await delay(1500); // Fake network delay
+    await delay(1500);
     const exams = JSON.parse(localStorage.getItem(STORAGE_KEYS.EXAMS) || '[]');
     const exam = exams.find((e: any) => e.id === examId);
     if (!exam) return 0;
@@ -169,7 +170,6 @@ const localDb = {
     const results = JSON.parse(localStorage.getItem(STORAGE_KEYS.RESULTS) || '[]');
     let addedCount = 0;
 
-    // Generate dummy data for simulation
     for (const cls of classes) {
         for (let i = 1; i <= 15; i++) {
             const name = `Siswa ${cls} ${i}`;
@@ -180,7 +180,7 @@ const localDb = {
                     className: cls,
                     completedAt: new Date().toISOString(),
                     status: 'COMPLETED',
-                    score: Math.floor(Math.random() * 40) + 60 // Random score 60-100
+                    score: Math.floor(Math.random() * 40) + 60 
                 });
                 addedCount++;
             }
@@ -222,43 +222,19 @@ const localDb = {
       return {
           activeExams: exams.filter((e: any) => e.isActive).length,
           completedStudents: results.length,
-          onlineStudents: Math.floor(Math.random() * 30) + 10 // Simulation
+          onlineStudents: Math.floor(Math.random() * 30) + 10
       };
   },
 
-  // Persistence
-  exportDatabase: async () => {
-      const data: Record<string, any> = {};
-      Object.values(STORAGE_KEYS).forEach(key => {
-          data[key] = JSON.parse(localStorage.getItem(key) || '[]');
-      });
-      const blob = new Blob([JSON.stringify(data, null, 2)], {type : 'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `exambit_backup_${new Date().toISOString().slice(0,10)}.json`;
-      a.click();
-  },
-  
-  importDatabase: async (jsonStr: string) => {
-      try {
-          const data = JSON.parse(jsonStr);
-          Object.values(STORAGE_KEYS).forEach(key => {
-              if(data[key]) localStorage.setItem(key, JSON.stringify(data[key]));
-          });
-          alert("Database berhasil di-restore!");
-          window.location.reload();
-      } catch (e) {
-          alert("Format file tidak valid!");
-      }
-  },
-  
+  exportDatabase: async () => {},
+  importDatabase: async (jsonStr: string) => {},
   resetDatabase: async () => {
-      Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
-      window.location.reload();
+      if(confirm("Reset semua data simulasi?")) {
+          localStorage.clear();
+          window.location.reload();
+      }
   }
 };
-
 
 // --- 2. API IMPLEMENTATION (PHP BACKEND) ---
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -314,7 +290,4 @@ const apiDb = {
   resetDatabase: async () => { if(confirm("Reset Server DB?")) apiRequest('/system.php', { method: 'POST', body: JSON.stringify({ action: 'reset_db' }) }) }
 };
 
-// ==========================================
-// EXPORTED SERVICE
-// ==========================================
 export const db = USE_API_BACKEND ? apiDb : localDb;

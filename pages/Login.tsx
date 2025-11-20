@@ -138,7 +138,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </Card>
         
         <div className="text-center mt-6 text-xs text-gray-400">
-          &copy; 2024 SMK Muhammadiyah Kalibawang.
+          &copy; 2025 SMK Muhammadiyah Kalibawang.
         </div>
       </div>
     </div>

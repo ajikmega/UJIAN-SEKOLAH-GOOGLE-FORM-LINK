@@ -4,17 +4,33 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { StudentExam } from './pages/StudentExam';
 import { User, Role } from './types';
 
-// Helper for simple hash routing if needed, but here we use State Routing for security within session
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [hasError, setHasError] = useState(false);
   
-  // Persist login across reloads simplified
   useEffect(() => {
-    const savedUser = localStorage.getItem('exambit_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    try {
+        const savedUser = localStorage.getItem('exambit_user');
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+    } catch (e) {
+        console.error("Storage parsing error", e);
     }
   }, []);
+
+  // Simple Error Boundary Logic
+  if (hasError) {
+      return (
+          <div className="min-h-screen flex items-center justify-center bg-gray-100 text-center p-6">
+              <div>
+                  <h1 className="text-2xl font-bold text-red-600 mb-2">Terjadi Kesalahan Sistem</h1>
+                  <p className="text-gray-600 mb-4">Silakan muat ulang halaman atau hubungi admin.</p>
+                  <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded">Muat Ulang</button>
+              </div>
+          </div>
+      );
+  }
 
   const handleLogin = (userData: User) => {
     setUser(userData);
@@ -26,15 +42,21 @@ const App: React.FC = () => {
     localStorage.removeItem('exambit_user');
   };
 
-  if (!user) {
-    return <Login onLogin={handleLogin} />;
-  }
+  try {
+      if (!user) {
+        return <Login onLogin={handleLogin} />;
+      }
 
-  if (user.role === Role.ADMIN) {
-    return <AdminDashboard onLogout={handleLogout} />;
-  }
+      if (user.role === Role.ADMIN) {
+        return <AdminDashboard onLogout={handleLogout} />;
+      }
 
-  return <StudentExam user={user} onLogout={handleLogout} />;
+      return <StudentExam user={user} onLogout={handleLogout} />;
+  } catch (e) {
+      console.error("Render error", e);
+      setHasError(true);
+      return null;
+  }
 };
 
 export default App;
