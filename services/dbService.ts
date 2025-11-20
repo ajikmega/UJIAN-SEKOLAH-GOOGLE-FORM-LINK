@@ -6,8 +6,8 @@ import { Exam, ExamResult, ClassGroup, User, Role, Question, ExamPackage } from 
 // Ubah 'false' menjadi 'true' jika Anda sudah menyiapkan Backend PHP & MySQL.
 // Saat 'false', aplikasi menggunakan penyimpanan browser (LocalStorage).
 // ============================================================================
-const USE_API_BACKEND = false; 
-const API_BASE_URL = 'http://localhost/api'; 
+const USE_API_BACKEND = true;
+const API_BASE_URL = (process.env.API_BASE_URL as string) || 'http://localhost/api'; 
 
 // --- HELPER & UTILS ---
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
