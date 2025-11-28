@@ -95,16 +95,24 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     setTokenError('');
   };
 
+  const enterFullScreen = () => {
+    const elem = document.documentElement as any;
+    if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch((err: any) => console.error("FS Error:", err));
+    } else if (elem.webkitRequestFullscreen) { /* Safari/Chrome */
+        elem.webkitRequestFullscreen();
+    } else if (elem.msRequestFullscreen) { /* IE11 */
+        elem.msRequestFullscreen();
+    } else if (elem.mozRequestFullScreen) { /* Firefox */
+        elem.mozRequestFullScreen();
+    }
+  };
+
   const handleSubmitToken = () => {
     if (!selectedExam) return;
     if (inputToken.toUpperCase() === selectedExam.token) {
-        // TRIGGER FULL SCREEN
-        const elem = document.documentElement;
-        if (elem.requestFullscreen) {
-            elem.requestFullscreen().catch(err => {
-                console.error("Error attempting to enable full-screen mode:", err);
-            });
-        }
+        // TRIGGER FULL SCREEN ROBUSTLY
+        enterFullScreen();
         
         setActiveExam(selectedExam); 
         setSelectedExam(null); 
@@ -118,6 +126,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
       // EXIT FULL SCREEN
       if (document.fullscreenElement) {
           document.exitFullscreen().catch(err => console.error(err));
+      } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
       }
 
       const resultData = {
@@ -325,7 +335,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
 
     // 4. Handle Fullscreen Exit
     const handleFullScreenChange = () => {
-        if (!document.fullscreenElement) {
+        if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
             recordViolation();
         }
     };
@@ -344,12 +354,14 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('fullscreenchange', handleFullScreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
     window.addEventListener('blur', handleBlur);
 
     return () => {
         document.removeEventListener('contextmenu', handleContextMenu);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         document.removeEventListener('fullscreenchange', handleFullScreenChange);
+        document.removeEventListener('webkitfullscreenchange', handleFullScreenChange);
         window.removeEventListener('blur', handleBlur);
     };
   }, []);
@@ -420,16 +432,18 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   };
 
   const reEnterFullScreen = () => {
-      const elem = document.documentElement;
+      const elem = document.documentElement as any;
       if (elem.requestFullscreen) {
-          elem.requestFullscreen().catch(err => console.error(err));
+          elem.requestFullscreen().catch((err: any) => console.error(err));
+      } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
       }
   };
 
   const currentQuestion = questions[currentQIndex];
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden noselect">
+    <div className="h-dvh flex flex-col bg-gray-100 overflow-hidden noselect">
       {/* WARNING OVERLAY */}
       {showWarning && (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">

@@ -11,10 +11,14 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html, body {
+  height: 100%;
+  overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
   background-color: #f3f4f6; /* Matches Tailwind bg-gray-100 */
   color: #1f2937; /* Matches Tailwind text-gray-800 */
 }
@@ -58,4 +62,10 @@ body {
        -moz-user-select: none; /* Old versions of Firefox */
         -ms-user-select: none; /* Internet Explorer/Edge */
             user-select: none; /* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
+}
+
+/* Mobile Fullscreen Utility */
+.h-dvh {
+  height: 100vh; /* Fallback */
+  height: 100dvh; /* Dynamic viewport height */
 }
