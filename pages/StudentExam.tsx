@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, AlertTriangle, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Info, Key, User as UserIcon, LogOut, LayoutGrid, BookOpen, AlertOctagon, ShieldAlert } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Info, Key, User as UserIcon, LogOut, LayoutGrid, BookOpen, AlertOctagon, ShieldAlert, Maximize } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -98,6 +98,14 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const handleSubmitToken = () => {
     if (!selectedExam) return;
     if (inputToken.toUpperCase() === selectedExam.token) {
+        // TRIGGER FULL SCREEN
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen().catch(err => {
+                console.error("Error attempting to enable full-screen mode:", err);
+            });
+        }
+        
         setActiveExam(selectedExam); 
         setSelectedExam(null); 
     } else {
@@ -107,6 +115,11 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleFinish = async (score?: number, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED', violationCount = 0) => {
     if (activeExam) {
+      // EXIT FULL SCREEN
+      if (document.fullscreenElement) {
+          document.exitFullscreen().catch(err => console.error(err));
+      }
+
       const resultData = {
         examId: activeExam.id,
         studentName: user.fullName || user.username,
@@ -310,6 +323,13 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
         recordViolation();
     };
 
+    // 4. Handle Fullscreen Exit
+    const handleFullScreenChange = () => {
+        if (!document.fullscreenElement) {
+            recordViolation();
+        }
+    };
+
     const recordViolation = () => {
         setViolations(prev => {
             const newVal = prev + 1;
@@ -323,11 +343,13 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
 
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
     window.addEventListener('blur', handleBlur);
 
     return () => {
         document.removeEventListener('contextmenu', handleContextMenu);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
+        document.removeEventListener('fullscreenchange', handleFullScreenChange);
         window.removeEventListener('blur', handleBlur);
     };
   }, []);
@@ -397,6 +419,13 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
       onFinish(score, status, violations);
   };
 
+  const reEnterFullScreen = () => {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+          elem.requestFullscreen().catch(err => console.error(err));
+      }
+  };
+
   const currentQuestion = questions[currentQIndex];
 
   return (
@@ -414,11 +443,11 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                       <p className="text-xs text-red-600 uppercase tracking-wide">Tercatat Sistem</p>
                   </div>
                   <p className="text-gray-600 mb-6 text-sm">
-                      Dilarang membuka tab lain, meminimalkan browser, atau mengklik aplikasi lain selama ujian berlangsung.
+                      Dilarang membuka tab lain, meminimalkan browser, atau keluar dari layar penuh selama ujian berlangsung.
                       <br/><br/>
                       <b>Aktivitas Anda tercatat dan akan dilaporkan ke pengawas.</b>
                   </p>
-                  <Button onClick={() => setShowWarning(false)} className="w-full bg-red-600 hover:bg-red-700">
+                  <Button onClick={() => { setShowWarning(false); reEnterFullScreen(); }} className="w-full bg-red-600 hover:bg-red-700">
                       SAYA MENGERTI & LANJUTKAN
                   </Button>
               </div>
