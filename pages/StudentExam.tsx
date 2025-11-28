@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, AlertTriangle, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Info, Key, User as UserIcon, LogOut, LayoutGrid, BookOpen } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Info, Key, User as UserIcon, LogOut, LayoutGrid, BookOpen, AlertOctagon, ShieldAlert } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -105,15 +105,16 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     }
   };
 
-  const handleFinish = async (score?: number) => {
+  const handleFinish = async (score?: number, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED', violationCount = 0) => {
     if (activeExam) {
       const resultData = {
         examId: activeExam.id,
         studentName: user.fullName || user.username,
         className: user.className || 'Unknown',
         completedAt: new Date().toISOString(),
-        status: 'COMPLETED' as const,
-        score: score !== undefined ? score : 0
+        status: status,
+        score: score !== undefined ? score : 0,
+        violationCount: violationCount
       };
 
       try {
@@ -151,7 +152,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-screen bg-gray-100 flex flex-col noselect">
       {/* Student Dashboard Header */}
       <header className="bg-[#0f4c81] text-white shadow-md sticky top-0 z-10 border-b border-blue-800">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
@@ -279,12 +280,54 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   );
 };
 
-const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number) => void }> = ({ exam, user, onFinish }) => {
+const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, status?: 'COMPLETED' | 'CHEATING_SUSPECTED', violations?: number) => void }> = ({ exam, user, onFinish }) => {
   const [timeLeft, setTimeLeft] = useState(exam.durationMinutes * 60);
   const [showConfirmFinish, setShowConfirmFinish] = useState(false);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [questions, setQuestions] = useState<Question[]>([]);
+  
+  // Anti-Cheating States
+  const [violations, setViolations] = useState(0);
+  const [showWarning, setShowWarning] = useState(false);
+
+  useEffect(() => {
+    // 1. Prevent Right Click
+    const handleContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+        return false;
+    };
+
+    // 2. Handle Visibility Change (Switching Tabs/Minimize)
+    const handleVisibilityChange = () => {
+        if (document.hidden) {
+            recordViolation();
+        }
+    };
+
+    // 3. Handle Window Blur (Clicking outside browser, Alt+Tab)
+    const handleBlur = () => {
+        recordViolation();
+    };
+
+    const recordViolation = () => {
+        setViolations(prev => {
+            const newVal = prev + 1;
+            setShowWarning(true);
+            return newVal;
+        });
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+        document.removeEventListener('contextmenu', handleContextMenu);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
 
   useEffect(() => {
     const loadQuestions = async () => {
@@ -337,7 +380,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number) =>
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const calculateAndFinish = () => {
+  const calculateAndFinish = (status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED') => {
       let score = 0;
       if (exam.mode === 'NATIVE' && questions.length > 0) {
           let correctCount = 0;
@@ -348,13 +391,37 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number) =>
           });
           score = Math.round((correctCount / questions.length) * 100);
       }
-      onFinish(score);
+      onFinish(score, status, violations);
   };
 
   const currentQuestion = questions[currentQIndex];
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
+    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden noselect">
+      {/* WARNING OVERLAY */}
+      {showWarning && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+              <div className="bg-white rounded-xl p-6 max-w-sm w-full text-center shadow-2xl">
+                  <div className="mx-auto w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4">
+                      <AlertOctagon size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">PERINGATAN PELANGGARAN!</h3>
+                  <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
+                      <p className="text-red-800 font-bold text-lg">Pelanggaran ke-{violations}</p>
+                      <p className="text-xs text-red-600 uppercase tracking-wide">Tercatat Sistem</p>
+                  </div>
+                  <p className="text-gray-600 mb-6 text-sm">
+                      Dilarang membuka tab lain, meminimalkan browser, atau mengklik aplikasi lain selama ujian berlangsung.
+                      <br/><br/>
+                      <b>Aktivitas Anda tercatat dan akan dilaporkan ke pengawas.</b>
+                  </p>
+                  <Button onClick={() => setShowWarning(false)} className="w-full bg-red-600 hover:bg-red-700">
+                      SAYA MENGERTI & LANJUTKAN
+                  </Button>
+              </div>
+          </div>
+      )}
+
       <div className="bg-[#0f4c81] text-white shadow-lg z-20 flex-shrink-0 relative border-b border-blue-900">
         <div className="container mx-auto px-4 h-[72px] flex justify-between items-center">
             <div className="flex flex-col min-w-0 mr-4">
@@ -391,7 +458,8 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number) =>
 
       <div className="flex-1 flex overflow-hidden relative">
           {exam.mode === 'GOOGLE_FORM' ? (
-               <div className="flex-1 bg-white w-full h-full">
+               <div className="flex-1 bg-white w-full h-full relative">
+                 {/* Invisible overlay to detect clicks if needed, though hard with iframe */}
                  {exam.googleFormUrl ? <iframe src={exam.googleFormUrl} className="w-full h-full border-none block" title="Google Form"></iframe> : <div className="p-10 text-center">URL Form Tidak Valid</div>}
                </div>
           ) : (
@@ -403,13 +471,13 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number) =>
                                 <span className="text-gray-500 font-bold">Soal No. {currentQIndex + 1}</span>
                                 <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">{currentQuestion.type === 'MULTIPLE_CHOICE' ? 'Pilihan Ganda' : 'Esai'}</span>
                               </div>
-                              <div className="text-lg font-medium text-gray-800 mb-6 leading-relaxed">{currentQuestion.text}</div>
+                              <div className="text-lg font-medium text-gray-800 mb-6 leading-relaxed noselect">{currentQuestion.text}</div>
                               <div className="space-y-3">
                                 {currentQuestion.type === 'MULTIPLE_CHOICE' && currentQuestion.options?.map((opt, idx) => (
                                     <label key={idx} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'hover:bg-gray-50 border-gray-200'}`}>
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-4 text-sm ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>{String.fromCharCode(65 + idx)}</div>
                                         <input type="radio" name={`q-${currentQuestion.id}`} className="hidden" checked={answers[currentQuestion.id] === idx.toString()} onChange={() => setAnswers(prev => ({...prev, [currentQuestion.id]: idx.toString()}))} />
-                                        <span className="text-gray-700">{opt}</span>
+                                        <span className="text-gray-700 noselect">{opt}</span>
                                     </label>
                                 ))}
                                 {currentQuestion.type === 'ESSAY' && (

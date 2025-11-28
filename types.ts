@@ -36,6 +36,7 @@ export interface ExamResult {
   status: 'COMPLETED' | 'CHEATING_SUSPECTED';
   score?: number; // 0-100
   answers?: Record<string, string>; // QuestionID -> Answer
+  violationCount?: number; // Number of times detecting tab switch/blur
 }
 
 export interface ClassGroup {
