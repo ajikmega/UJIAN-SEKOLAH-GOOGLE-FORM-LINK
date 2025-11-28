@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
-import { Exam, ClassGroup, Question, ExamPackage, ExamMode } from '../types';
+import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, FileText, Database, RefreshCw, CheckCircle, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, UploadCloud, Edit, Trash2, BookOpen, Settings } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
   const [exams, setExams] = useState<Exam[]>([]);
   
   const loadExams = async () => {
@@ -43,9 +43,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout })
           <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<Home size={18} />} label="Ringkasan" />
           <NavButton active={activeTab === 'exams'} onClick={() => setActiveTab('exams')} icon={<BarChart size={18} />} label="Manajemen Ujian" />
           <NavButton active={activeTab === 'questions'} onClick={() => setActiveTab('questions')} icon={<Database size={18} />} label="Bank Soal (Form)" />
-          <NavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<FileText size={18} />} label="Analisis & Hasil" />
           <NavButton active={activeTab === 'classes'} onClick={() => setActiveTab('classes')} icon={<Users size={18} />} label="Kelas & Siswa" />
-          <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={18} />} label="Pengaturan" />
         </aside>
 
         {/* Main Content */}
@@ -54,8 +52,6 @@ export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout })
           {activeTab === 'exams' && <ExamManager exams={exams} onUpdate={loadExams} />}
           {activeTab === 'classes' && <ClassManager />}
           {activeTab === 'questions' && <QuestionBank />}
-          {activeTab === 'analytics' && <AnalyticsDashboard exams={exams} />}
-          {activeTab === 'settings' && <SettingsPanel />}
         </main>
       </div>
     </div>
@@ -436,112 +432,6 @@ const QuestionBank: React.FC = () => {
     );
 };
 
-// --- Analytics Dashboard ---
-const AnalyticsDashboard: React.FC<{ exams: Exam[] }> = ({ exams }) => {
-    const [selectedExamId, setSelectedExamId] = useState('');
-    const [stats, setStats] = useState<any>(null);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        const loadStats = async () => {
-            if(selectedExamId) {
-                setLoading(true);
-                try {
-                    const data = await db.getExamStats(selectedExamId);
-                    setStats(data);
-                } catch(e) {}
-                setLoading(false);
-            } else {
-                setStats(null);
-            }
-        }
-        loadStats();
-    }, [selectedExamId]);
-
-    const handleSync = async () => {
-        if(!selectedExamId) return;
-        const url = prompt("Masukkan Link Spreadsheet Hasil (Google Sheets/Excel Online):");
-        if(!url) return;
-        setIsSyncing(true);
-        try {
-            const addedCount = await db.syncGoogleFormResults(selectedExamId);
-            alert(`Berhasil menarik data! ${addedCount} nilai siswa telah masuk ke sistem.`);
-            // Refresh stats
-            const data = await db.getExamStats(selectedExamId);
-            setStats(data);
-        } catch(e) {
-            alert("Gagal melakukan sinkronisasi. Cek server.");
-        }
-        setIsSyncing(false);
-    };
-
-    return (
-        <div className="space-y-6">
-            <Card>
-                <div className="flex flex-col md:flex-row gap-4 items-center">
-                    <div className="flex-1 w-full">
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Pilih Ujian untuk Dianalisis</label>
-                        <select className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" value={selectedExamId} onChange={e => setSelectedExamId(e.target.value)}>
-                            <option value="">-- Pilih Ujian --</option>
-                            {exams.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
-                        </select>
-                    </div>
-                    <div className="md:mt-6 w-full md:w-auto">
-                        <Button onClick={handleSync} disabled={!selectedExamId || isSyncing} variant="outline" className="w-full md:w-auto flex items-center justify-center gap-2">
-                            {isSyncing ? <RefreshCw size={16} className="animate-spin"/> : <UploadCloud size={16}/>}
-                            {isSyncing ? 'Menarik Data...' : 'Tarik Data (Sync)'}
-                        </Button>
-                    </div>
-                </div>
-            </Card>
-
-            {loading && <div className="text-center py-10">Memuat data analisis...</div>}
-
-            {!loading && stats ? (
-                <>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <StatCard label="Total Siswa" value={stats.totalStudents} color="bg-blue-500" />
-                        <StatCard label="Rata-rata Nilai" value={stats.averageScore} color="bg-indigo-500" />
-                        <StatCard label="Nilai Tertinggi" value={stats.highestScore} color="bg-green-500" />
-                        <StatCard label="Lulus (KKM 75)" value={`${stats.passCount} / ${stats.totalStudents}`} color="bg-teal-600" />
-                    </div>
-                    {/* ... Charts & Table (same as before) ... */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                         <Card title="Ranking Siswa">
-                            <div className="overflow-y-auto max-h-64">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-50 sticky top-0 shadow-sm z-10">
-                                        <tr><th className="text-left p-2 font-bold text-gray-600">Nama</th><th className="text-left p-2 font-bold text-gray-600">Kelas</th><th className="text-right p-2 font-bold text-gray-600">Nilai</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        {[...stats.results].sort((a: any, b: any) => b.score - a.score).map((r: any, i: number) => (
-                                            <tr key={i} className="border-b hover:bg-blue-50 transition-colors">
-                                                <td className="p-2">{r.studentName}</td>
-                                                <td className="p-2 text-gray-500">{r.className}</td>
-                                                <td className={`p-2 text-right font-bold ${r.score >= 75 ? 'text-green-600' : 'text-red-500'}`}>{r.score}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                         </Card>
-                    </div>
-                </>
-            ) : (
-                !loading && <div className="text-center py-12 text-gray-400 bg-white rounded-lg border border-dashed"><BarChart size={48} className="mx-auto mb-2 opacity-30" /><p>Pilih ujian di atas lalu klik "Tarik Data" untuk melihat hasil.</p></div>
-            )}
-        </div>
-    );
-};
-
-const StatCard: React.FC<{ label: string, value: string | number, color: string }> = ({ label, value, color }) => (
-    <div className={`${color} text-white p-4 rounded-lg shadow-md`}>
-        <p className="text-blue-100 text-sm font-medium">{label}</p>
-        <p className="text-3xl font-bold mt-1">{value}</p>
-    </div>
-);
-
 // --- Class Manager ---
 const ClassManager: React.FC = () => {
     const [classes, setClasses] = useState<ClassGroup[]>([]);
@@ -592,33 +482,4 @@ const ClassManager: React.FC = () => {
               </ul>
         </Card>
     )
-};
-
-// --- Settings Panel ---
-const SettingsPanel: React.FC = () => {
-    const [loading, setLoading] = useState(false);
-    
-    const handleReset = async () => {
-        setLoading(true);
-        await db.resetDatabase();
-        setLoading(false);
-    };
-
-    return (
-        <Card title="Pengaturan Sistem">
-            <div className="space-y-4">
-                <div className="p-4 border rounded bg-red-50 border-red-200">
-                    <h4 className="font-bold text-red-800 mb-2">Zone Bahaya</h4>
-                    <p className="text-sm text-red-600 mb-3">Tindakan di bawah ini akan mempengaruhi database server secara permanen.</p>
-                    <Button variant="danger" onClick={handleReset} disabled={loading}>
-                        {loading ? 'Memproses...' : 'Reset Database (Hapus Semua Data)'}
-                    </Button>
-                </div>
-                <div className="p-4 border rounded bg-gray-50">
-                    <h4 className="font-bold text-gray-800 mb-2">Informasi API</h4>
-                    <p className="text-sm text-gray-600">Frontend ini terhubung ke endpoint API yang dikonfigurasi di <code>services/dbService.ts</code>. Pastikan backend PHP sudah berjalan.</p>
-                </div>
-            </div>
-        </Card>
-    );
 };
