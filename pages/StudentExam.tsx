@@ -21,6 +21,21 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const [inputToken, setInputToken] = useState('');
   const [tokenError, setTokenError] = useState('');
 
+  // --- Resume Exam Logic (Persist on Refresh) ---
+  useEffect(() => {
+    const savedExamStr = localStorage.getItem('exambit_active_exam');
+    if (savedExamStr) {
+      try {
+        const savedExam = JSON.parse(savedExamStr);
+        // Validasi: Pastikan ujian ini belum ditandai selesai di sesi ini (optional)
+        setActiveExam(savedExam);
+      } catch (e) {
+        localStorage.removeItem('exambit_active_exam');
+        localStorage.removeItem('exambit_exam_start_timestamp');
+      }
+    }
+  }, []);
+
   // --- Heartbeat System (Realtime Online Status) ---
   useEffect(() => {
     const sendSignal = async () => {
@@ -114,6 +129,13 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
         // TRIGGER FULL SCREEN ROBUSTLY
         enterFullScreen();
         
+        // Simpan state ke LocalStorage agar tahan refresh
+        localStorage.setItem('exambit_active_exam', JSON.stringify(selectedExam));
+        // Simpan waktu mulai jika belum ada (untuk timer yang akurat)
+        if (!localStorage.getItem('exambit_exam_start_timestamp')) {
+            localStorage.setItem('exambit_exam_start_timestamp', Date.now().toString());
+        }
+
         setActiveExam(selectedExam); 
         setSelectedExam(null); 
     } else {
@@ -142,6 +164,11 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
       try {
           await db.submitExam(resultData);
+          
+          // Bersihkan LocalStorage setelah selesai
+          localStorage.removeItem('exambit_active_exam');
+          localStorage.removeItem('exambit_exam_start_timestamp');
+
           setIsExamFinished(true);
           setActiveExam(null);
       } catch(e) {
@@ -304,7 +331,19 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 };
 
 const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, status?: 'COMPLETED' | 'CHEATING_SUSPECTED', violations?: number) => void }> = ({ exam, user, onFinish }) => {
-  const [timeLeft, setTimeLeft] = useState(exam.durationMinutes * 60);
+  // Timer Init based on persisted start time to handle refresh
+  const [timeLeft, setTimeLeft] = useState(() => {
+      const startStr = localStorage.getItem('exambit_exam_start_timestamp');
+      if (startStr) {
+          const startTime = parseInt(startStr, 10);
+          const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+          const remaining = (exam.durationMinutes * 60) - elapsedSeconds;
+          // Jika waktu habis saat refresh, set 0
+          return remaining > 0 ? remaining : 0;
+      }
+      return exam.durationMinutes * 60;
+  });
+
   const [showConfirmFinish, setShowConfirmFinish] = useState(false);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
