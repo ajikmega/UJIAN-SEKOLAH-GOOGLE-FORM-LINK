@@ -77,11 +77,14 @@ const apiDb = {
   },
 
   deleteClass: async (id: string) => {
-    const { error } = await supabase
+    // Gunakan { count: 'exact' } untuk memastikan data benar-benar terhapus
+    const { error, count } = await supabase
       .from('classes')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('id', id);
+    
     if (error) handleError(error, 'Hapus Kelas');
+    if (count === 0) throw new Error("Gagal menghapus: Data tidak ditemukan atau akses ditolak (Cek RLS).");
   },
 
   // QUESTIONS (Bank Link Form)
@@ -113,11 +116,13 @@ const apiDb = {
   },
 
   deleteQuestion: async (id: string) => {
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from('questions')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('id', id);
+    
     if (error) handleError(error, 'Hapus Soal');
+    if (count === 0) throw new Error("Gagal menghapus: Data tidak ditemukan atau akses ditolak (Cek RLS).");
   },
 
   // PACKAGES (Placeholder untuk kompatibilitas type)
@@ -178,8 +183,13 @@ const apiDb = {
   },
 
   deleteExam: async (id: string) => {
-    const { error } = await supabase.from('exams').delete().eq('id', id);
+    const { error, count } = await supabase
+      .from('exams')
+      .delete({ count: 'exact' })
+      .eq('id', id);
+      
     if (error) handleError(error, 'Hapus Ujian');
+    if (count === 0) throw new Error("Gagal menghapus: Data tidak ditemukan atau akses ditolak (Cek RLS).");
   },
 
   updateExamStatus: async (id: string, isActive: boolean) => {
@@ -187,7 +197,22 @@ const apiDb = {
       .from('exams')
       .update({ is_active: isActive })
       .eq('id', id);
+    
     if (error) handleError(error, 'Update Status Ujian');
+
+    // FITUR BARU: Jika ujian dimatikan (STOP), bersihkan sesi siswa (Siswa Online = 0)
+    if (!isActive) {
+      // Menghapus semua data di tabel sessions untuk mereset counter
+      // Supabase butuh filter untuk delete, kita pakai neq 'id' null (semua baris)
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .delete()
+        .neq('student_name', '___'); // Trick to delete all rows
+      
+      if (sessionError) {
+        console.warn("Gagal mereset sesi siswa online:", sessionError.message);
+      }
+    }
   },
 
   // RESULTS
