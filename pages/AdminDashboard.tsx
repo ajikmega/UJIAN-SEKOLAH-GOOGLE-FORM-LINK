@@ -194,9 +194,14 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   const handleDelete = async (id: string) => {
       if (window.confirm("Apakah Anda yakin ingin menghapus ujian ini? Data yang dihapus tidak dapat dikembalikan.")) {
           setLoading(true);
-          await db.deleteExam(id);
-          setLoading(false);
-          onUpdate();
+          try {
+              await db.deleteExam(id);
+              await onUpdate();
+          } catch (e: any) {
+              alert("Gagal menghapus ujian: " + e.message);
+          } finally {
+              setLoading(false);
+          }
       }
   };
 
@@ -218,8 +223,8 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           }
           setIsModalOpen(false);
           onUpdate();
-      } catch(e) {
-          alert("Gagal menyimpan ujian");
+      } catch(e: any) {
+          alert("Gagal menyimpan ujian: " + e.message);
       } finally {
           setLoading(false);
       }
@@ -228,9 +233,14 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
 
   const toggleStatus = async (id: string, current: boolean) => {
     setLoading(true);
-    await db.updateExamStatus(id, !current);
-    setLoading(false);
-    onUpdate();
+    try {
+        await db.updateExamStatus(id, !current);
+        onUpdate();
+    } catch (e: any) {
+        alert("Gagal update status: " + e.message);
+    } finally {
+        setLoading(false);
+    }
   };
 
   const handleSelectFormFromBank = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -367,9 +377,14 @@ const QuestionBank: React.FC = () => {
 
     const loadQuestions = async () => {
         setLoading(true);
-        const data = await db.getQuestions();
-        setQuestions(data.filter(q => q.type === 'EXTERNAL_FORM'));
-        setLoading(false);
+        try {
+            const data = await db.getQuestions();
+            setQuestions(data.filter(q => q.type === 'EXTERNAL_FORM'));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => { loadQuestions(); }, []);
@@ -377,18 +392,30 @@ const QuestionBank: React.FC = () => {
     const handleAddQuestion = async () => {
         if(newQ.text && newQ.topic && newQ.googleFormUrl) {
             setLoading(true);
-            await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM' } as Question);
-            setIsQModalOpen(false);
-            setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' });
-            loadQuestions();
+            try {
+                await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM' } as Question);
+                setIsQModalOpen(false);
+                setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' });
+                await loadQuestions();
+            } catch (e: any) {
+                alert("Gagal menambah soal: " + e.message);
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
     const handleDelete = async (id: string) => {
         if(window.confirm("Hapus link ini dari bank soal?")) {
             setLoading(true);
-            await db.deleteQuestion(id);
-            loadQuestions();
+            try {
+                await db.deleteQuestion(id);
+                await loadQuestions();
+            } catch (e: any) {
+                alert("Gagal menghapus soal: " + e.message);
+            } finally {
+                setLoading(false);
+            }
         }
     }
 
@@ -449,17 +476,29 @@ const ClassManager: React.FC = () => {
         const val = input.value;
         if(val) { 
             setLoading(true);
-            await db.addClass(val); 
-            input.value = ''; 
-            loadClasses();
+            try {
+                await db.addClass(val); 
+                input.value = ''; 
+                await loadClasses();
+            } catch(e: any) {
+                alert("Gagal menambah kelas: " + e.message);
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
     const handleDelete = async (id: string) => {
         if(window.confirm("Hapus kelas?")) {
             setLoading(true);
-            await db.deleteClass(id);
-            loadClasses();
+            try {
+                await db.deleteClass(id);
+                await loadClasses();
+            } catch (e: any) {
+                alert("Gagal menghapus kelas: " + e.message);
+            } finally {
+                setLoading(false);
+            }
         }
     };
 

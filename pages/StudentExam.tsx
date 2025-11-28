@@ -313,7 +313,10 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
     const recordViolation = () => {
         setViolations(prev => {
             const newVal = prev + 1;
-            setShowWarning(true);
+            // Logic Update: Show warning only when count hits exactly 5
+            if (newVal === 5) {
+                setShowWarning(true);
+            }
             return newVal;
         });
     };
