@@ -1,12 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { Component, useState, useEffect, ReactNode } from 'react';
 import { Login } from './pages/Login';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { StudentExam } from './pages/StudentExam';
 import { User, Role } from './types';
 
-const App: React.FC = () => {
+interface ErrorBoundaryProps {
+  children?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMsg: string;
+}
+
+// Error Boundary must be a Class Component
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, errorMsg: '' };
+  }
+
+  static getDerivedStateFromError(error: any): ErrorBoundaryState {
+    return { hasError: true, errorMsg: error.toString() };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+          <div className="min-h-screen flex items-center justify-center bg-gray-100 text-center p-6">
+              <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+                  <h1 className="text-2xl font-bold text-red-600 mb-2">Terjadi Kesalahan Sistem</h1>
+                  <p className="text-gray-600 mb-4">Aplikasi mengalami crash.</p>
+                  <pre className="text-xs text-left bg-gray-100 p-2 rounded mb-4 overflow-auto max-h-32 text-red-500">
+                    {this.state.errorMsg}
+                  </pre>
+                  <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Muat Ulang Halaman</button>
+              </div>
+          </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const AppContent: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [hasError, setHasError] = useState(false);
   
   useEffect(() => {
     try {
@@ -16,21 +58,9 @@ const App: React.FC = () => {
         }
     } catch (e) {
         console.error("Storage parsing error", e);
+        localStorage.removeItem('exambit_user');
     }
   }, []);
-
-  // Simple Error Boundary Logic
-  if (hasError) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-gray-100 text-center p-6">
-              <div>
-                  <h1 className="text-2xl font-bold text-red-600 mb-2">Terjadi Kesalahan Sistem</h1>
-                  <p className="text-gray-600 mb-4">Silakan muat ulang halaman atau hubungi admin.</p>
-                  <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded">Muat Ulang</button>
-              </div>
-          </div>
-      );
-  }
 
   const handleLogin = (userData: User) => {
     setUser(userData);
@@ -42,21 +72,23 @@ const App: React.FC = () => {
     localStorage.removeItem('exambit_user');
   };
 
-  try {
-      if (!user) {
-        return <Login onLogin={handleLogin} />;
-      }
-
-      if (user.role === Role.ADMIN) {
-        return <AdminDashboard onLogout={handleLogout} />;
-      }
-
-      return <StudentExam user={user} onLogout={handleLogout} />;
-  } catch (e) {
-      console.error("Render error", e);
-      setHasError(true);
-      return null;
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
   }
+
+  if (user.role === Role.ADMIN) {
+    return <AdminDashboard onLogout={handleLogout} />;
+  }
+
+  return <StudentExam user={user} onLogout={handleLogout} />;
+};
+
+const App: React.FC = () => {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
 };
 
 export default App;

@@ -1,14 +1,14 @@
-
 import { Exam, ExamResult, ClassGroup, User, Role, Question, ExamPackage } from '../types';
 import { supabase } from './supabaseClient';
 
-// --- SUPABASE IMPLEMENTATION ---
+// --- SUPABASE DATABASE SERVICE (ONLINE MODE) ---
+// Seluruh data akan disimpan dan diambil langsung dari Supabase.
 
 const handleError = (error: any, context: string) => {
     console.error(`Supabase Error [${context}]:`, error);
     const msg = error.message || '';
     // Deteksi error tabel hilang (PostgREST code 42P01 atau pesan spesifik js client)
-    if (msg.includes("Could not find the table") || msg.includes("relation") && msg.includes("does not exist")) {
+    if (msg.includes("Could not find the table") || (msg.includes("relation") && msg.includes("does not exist"))) {
         throw new Error(`SETUP_REQUIRED: Tabel database belum dibuat. Jalankan script SQL di Dashboard Supabase.`);
     }
     throw new Error(msg || `Gagal memuat data ${context}`);
@@ -44,6 +44,7 @@ const apiDb = {
         };
       } else {
         // Login Siswa: Tidak ada tabel user khusus, return object user untuk sesi
+        // Data siswa akan terekam di tabel 'sessions' saat heartbeat dan 'results' saat selesai.
         return {
           id: identifier, // Session ID yang digenerate frontend
           username: identifier,
@@ -53,7 +54,7 @@ const apiDb = {
         };
       }
     } catch (err: any) {
-      if (err.message.includes("SETUP_REQUIRED")) throw err;
+      if (err.message && err.message.includes("SETUP_REQUIRED")) throw err;
       throw new Error(err.message || "Gagal melakukan login.");
     }
   },
@@ -200,10 +201,9 @@ const apiDb = {
     
     if (error) handleError(error, 'Update Status Ujian');
 
-    // FITUR BARU: Jika ujian dimatikan (STOP), bersihkan sesi siswa (Siswa Online = 0)
+    // FITUR: Jika ujian dimatikan (STOP), bersihkan sesi siswa (Siswa Online = 0)
     if (!isActive) {
       // Menghapus semua data di tabel sessions untuk mereset counter
-      // Supabase butuh filter untuk delete, kita pakai neq 'id' null (semua baris)
       const { error: sessionError } = await supabase
         .from('sessions')
         .delete()
@@ -233,7 +233,7 @@ const apiDb = {
 
   submitExam: async (result: ExamResult) => {
     // Upsert logic (insert or update if exists)
-    // Cek apakah sudah ada
+    // Cek apakah sudah ada hasil untuk ujian ini dan siswa ini
     const { data: existing } = await supabase
         .from('results')
         .select('id')
@@ -242,24 +242,21 @@ const apiDb = {
         .maybeSingle();
 
     let error;
+    const payload = {
+        exam_id: result.examId,
+        student_name: result.studentName,
+        class_name: result.className,
+        score: result.score,
+        status: result.status,
+        completed_at: result.completedAt,
+        violation_count: result.violationCount
+    };
+
     if (existing) {
-        const res = await supabase.from('results').update({
-            score: result.score,
-            status: result.status,
-            completed_at: result.completedAt,
-            violation_count: result.violationCount
-        }).eq('id', existing.id);
+        const res = await supabase.from('results').update(payload).eq('id', existing.id);
         error = res.error;
     } else {
-        const res = await supabase.from('results').insert([{
-            exam_id: result.examId,
-            student_name: result.studentName,
-            class_name: result.className,
-            score: result.score,
-            status: result.status,
-            completed_at: result.completedAt,
-            violation_count: result.violationCount
-        }]);
+        const res = await supabase.from('results').insert([payload]);
         error = res.error;
     }
     
@@ -268,8 +265,7 @@ const apiDb = {
 
   // ANALYTICS & SYNC
   syncGoogleFormResults: async (examId: string) => {
-    // Simulasi Sync: Generate data dummy ke Supabase
-    // Ambil data ujian untuk tau kelasnya
+    // Simulasi Sync: Generate data dummy yang disimpan ke Database Supabase
     const { data: exam, error: examError } = await supabase.from('exams').select('assigned_classes').eq('id', examId).single();
     if (examError || !exam) handleError(examError || {message: "Exam not found"}, 'Sync Data');
     
@@ -296,7 +292,8 @@ const apiDb = {
                     class_name: cls,
                     score: Math.floor(Math.random() * 40) + 60,
                     status: 'COMPLETED',
-                    completed_at: new Date().toISOString()
+                    completed_at: new Date().toISOString(),
+                    violation_count: 0
                 });
                 addedCount++;
             }
@@ -304,6 +301,7 @@ const apiDb = {
     }
     
     if (newResults.length > 0) {
+        // Bulk insert ke Supabase
         const { error } = await supabase.from('results').insert(newResults);
         if (error) handleError(error, 'Insert Sync Data');
     }

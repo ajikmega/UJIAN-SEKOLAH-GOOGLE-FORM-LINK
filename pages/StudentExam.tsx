@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
@@ -27,34 +26,31 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     if (savedExamStr) {
       try {
         const savedExam = JSON.parse(savedExamStr);
-        // Validasi: Pastikan ujian ini belum ditandai selesai di sesi ini (optional)
-        setActiveExam(savedExam);
+        if (savedExam._studentUser === user.username) {
+            setActiveExam(savedExam);
+        } else {
+            localStorage.removeItem('exambit_active_exam');
+            localStorage.removeItem('exambit_exam_start_timestamp');
+        }
       } catch (e) {
         localStorage.removeItem('exambit_active_exam');
         localStorage.removeItem('exambit_exam_start_timestamp');
       }
     }
-  }, []);
+  }, [user.username]);
 
   // --- Heartbeat System (Realtime Online Status) ---
   useEffect(() => {
     const sendSignal = async () => {
         try {
             await db.sendHeartbeat(user);
-        } catch(e) {
-            // Ignore heartbeat errors silently
-        }
+        } catch(e) { }
     };
-    
-    // Send immediately on load
     sendSignal();
-
-    // Send every 30 seconds
     const interval = setInterval(sendSignal, 30000);
     return () => clearInterval(interval);
   }, [user]);
 
-  // Function to fetch and filter exams
   const fetchExams = async () => {
     try {
         const [allExams, allResults] = await Promise.all([
@@ -64,20 +60,16 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
         
         const now = new Date();
         const filtered = allExams.filter(exam => {
-            // 1. Check Active Status
             if (!exam.isActive) return false;
-            // 2. Check Class Enrollment
             if (exam.assignedClasses && exam.assignedClasses.length > 0) {
                 if (!user.className || !exam.assignedClasses.includes(user.className)) {
                     return false;
                 }
             }
-            // 3. Check Schedule
             if (exam.startTime) {
                 const start = new Date(exam.startTime);
                 if (now < start) return false;
             }
-            // 4. Check if already completed
             const isDone = allResults.some(r => 
                 r.examId === exam.id && 
                 r.studentName === (user.fullName || user.username)
@@ -114,29 +106,23 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     const elem = document.documentElement as any;
     if (elem.requestFullscreen) {
         elem.requestFullscreen().catch((err: any) => console.error("FS Error:", err));
-    } else if (elem.webkitRequestFullscreen) { /* Safari/Chrome */
+    } else if (elem.webkitRequestFullscreen) {
         elem.webkitRequestFullscreen();
-    } else if (elem.msRequestFullscreen) { /* IE11 */
-        elem.msRequestFullscreen();
-    } else if (elem.mozRequestFullScreen) { /* Firefox */
-        elem.mozRequestFullScreen();
     }
   };
 
   const handleSubmitToken = () => {
     if (!selectedExam) return;
     if (inputToken.toUpperCase() === selectedExam.token) {
-        // TRIGGER FULL SCREEN ROBUSTLY
         enterFullScreen();
+        const examState = { ...selectedExam, _studentUser: user.username };
+        localStorage.setItem('exambit_active_exam', JSON.stringify(examState));
         
-        // Simpan state ke LocalStorage agar tahan refresh
-        localStorage.setItem('exambit_active_exam', JSON.stringify(selectedExam));
-        // Simpan waktu mulai jika belum ada (untuk timer yang akurat)
         if (!localStorage.getItem('exambit_exam_start_timestamp')) {
             localStorage.setItem('exambit_exam_start_timestamp', Date.now().toString());
         }
 
-        setActiveExam(selectedExam); 
+        setActiveExam(examState); 
         setSelectedExam(null); 
     } else {
         setTokenError('Token tidak valid!');
@@ -145,11 +131,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleFinish = async (score?: number, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED', violationCount = 0) => {
     if (activeExam) {
-      // EXIT FULL SCREEN
       if (document.fullscreenElement) {
           document.exitFullscreen().catch(err => console.error(err));
-      } else if ((document as any).webkitExitFullscreen) {
-          (document as any).webkitExitFullscreen();
       }
 
       const resultData = {
@@ -164,11 +147,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
       try {
           await db.submitExam(resultData);
-          
-          // Bersihkan LocalStorage setelah selesai
           localStorage.removeItem('exambit_active_exam');
           localStorage.removeItem('exambit_exam_start_timestamp');
-
           setIsExamFinished(true);
           setActiveExam(null);
       } catch(e) {
@@ -203,7 +183,6 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col noselect">
-      {/* Student Dashboard Header */}
       <header className="bg-[#0f4c81] text-white shadow-md sticky top-0 z-10 border-b border-blue-800">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -216,7 +195,6 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
                     <p className="text-xs text-blue-200">Computer Based Test</p>
                 </div>
             </div>
-            
             <div className="flex items-center gap-4">
                <div className="hidden md:flex flex-col items-end mr-2">
                  <span className="font-semibold text-sm">{user.fullName}</span>
@@ -259,7 +237,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
                 </div>
                 <h3 className="text-lg font-bold text-gray-700">Tidak Ada Ujian Aktif</h3>
                 <p className="text-gray-500 max-w-sm mt-2">
-                    Saat ini tidak ada jadwal ujian yang tersedia untuk kelas Anda, atau Anda telah menyelesaikan semua ujian. Pastikan server terhubung.
+                    Saat ini tidak ada jadwal ujian yang tersedia untuk kelas Anda.
                 </p>
                 <Button variant="outline" onClick={handleRefresh} className="mt-6">Cek Lagi</Button>
             </div>
@@ -331,14 +309,12 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 };
 
 const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, status?: 'COMPLETED' | 'CHEATING_SUSPECTED', violations?: number) => void }> = ({ exam, user, onFinish }) => {
-  // Timer Init based on persisted start time to handle refresh
   const [timeLeft, setTimeLeft] = useState(() => {
       const startStr = localStorage.getItem('exambit_exam_start_timestamp');
       if (startStr) {
           const startTime = parseInt(startStr, 10);
           const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
           const remaining = (exam.durationMinutes * 60) - elapsedSeconds;
-          // Jika waktu habis saat refresh, set 0
           return remaining > 0 ? remaining : 0;
       }
       return exam.durationMinutes * 60;
@@ -348,44 +324,22 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [questions, setQuestions] = useState<Question[]>([]);
-  
-  // Anti-Cheating States
   const [violations, setViolations] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
 
   useEffect(() => {
-    // 1. Prevent Right Click
-    const handleContextMenu = (e: MouseEvent) => {
-        e.preventDefault();
-        return false;
-    };
-
-    // 2. Handle Visibility Change (Switching Tabs/Minimize)
-    const handleVisibilityChange = () => {
-        if (document.hidden) {
-            recordViolation();
-        }
-    };
-
-    // 3. Handle Window Blur (Clicking outside browser, Alt+Tab)
-    const handleBlur = () => {
-        recordViolation();
-    };
-
-    // 4. Handle Fullscreen Exit
+    const handleContextMenu = (e: MouseEvent) => { e.preventDefault(); return false; };
+    const handleVisibilityChange = () => { if (document.hidden) recordViolation(); };
+    const handleBlur = () => { recordViolation(); };
     const handleFullScreenChange = () => {
         if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
             recordViolation();
         }
     };
-
     const recordViolation = () => {
         setViolations(prev => {
             const newVal = prev + 1;
-            // Logic Update: Show warning only when count hits exactly 5
-            if (newVal === 5) {
-                setShowWarning(true);
-            }
+            if (newVal === 5) setShowWarning(true);
             return newVal;
         });
     };
@@ -409,29 +363,24 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
     const loadQuestions = async () => {
         if(exam.mode === 'NATIVE' && exam.examPackageId) {
             try {
-                // In API version, getQuestions should ideally filter by package ID on server
-                // Here we simulate getting all then filtering
-                const [allPackages, allQuestions] = await Promise.all([
-                    db.getPackages(),
-                    db.getQuestions()
-                ]);
+                const [allPackages, allQuestions] = await Promise.all([db.getPackages(), db.getQuestions()]);
                 const pkg = allPackages.find(p => p.id === exam.examPackageId);
                 if(pkg) {
                     const examQuestions = allQuestions.filter(q => pkg.questionIds.includes(q.id));
                     setQuestions(examQuestions);
                 }
-            } catch(e) { console.error(e); }
+            } catch(e) { }
         }
     };
     loadQuestions();
   }, [exam]);
 
+  // TIMER LOGIC: Only decrements time
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 1) {
+        if (prev <= 0) {
           clearInterval(timer);
-          calculateAndFinish();
           return 0;
         }
         return prev - 1;
@@ -439,13 +388,19 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-  
-  // Exam Room also sends heartbeats
+
+  // AUTO-FINISH LOGIC: Triggered when timeLeft becomes 0
+  // This ensures that when the time runs out, 'calculateAndFinish' is called 
+  // with the LATEST state of 'answers' and 'questions'.
   useEffect(() => {
-    const sendSignal = async () => {
-        try { await db.sendHeartbeat(user); } catch(e) {}
-    };
-    const interval = setInterval(sendSignal, 30000); // 30s
+    if (timeLeft === 0) {
+        calculateAndFinish('COMPLETED');
+    }
+  }, [timeLeft]);
+  
+  useEffect(() => {
+    const sendSignal = async () => { try { await db.sendHeartbeat(user); } catch(e) {} };
+    const interval = setInterval(sendSignal, 30000); 
     return () => clearInterval(interval);
   }, [user]);
 
@@ -472,18 +427,14 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
 
   const reEnterFullScreen = () => {
       const elem = document.documentElement as any;
-      if (elem.requestFullscreen) {
-          elem.requestFullscreen().catch((err: any) => console.error(err));
-      } else if (elem.webkitRequestFullscreen) {
-          elem.webkitRequestFullscreen();
-      }
+      if (elem.requestFullscreen) elem.requestFullscreen().catch((err: any) => console.error(err));
+      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
   };
 
   const currentQuestion = questions[currentQIndex];
 
   return (
     <div className="h-dvh flex flex-col bg-gray-100 overflow-hidden noselect">
-      {/* WARNING OVERLAY */}
       {showWarning && (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white rounded-xl p-6 max-w-sm w-full text-center shadow-2xl">
@@ -495,14 +446,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                       <p className="text-red-800 font-bold text-lg">Pelanggaran ke-{violations}</p>
                       <p className="text-xs text-red-600 uppercase tracking-wide">Tercatat Sistem</p>
                   </div>
-                  <p className="text-gray-600 mb-6 text-sm">
-                      Dilarang membuka tab lain, meminimalkan browser, atau keluar dari layar penuh selama ujian berlangsung.
-                      <br/><br/>
-                      <b>Aktivitas Anda tercatat dan akan dilaporkan ke pengawas.</b>
-                  </p>
-                  <Button onClick={() => { setShowWarning(false); reEnterFullScreen(); }} className="w-full bg-red-600 hover:bg-red-700">
-                      SAYA MENGERTI & LANJUTKAN
-                  </Button>
+                  <Button onClick={() => { setShowWarning(false); reEnterFullScreen(); }} className="w-full bg-red-600 hover:bg-red-700">SAYA MENGERTI & LANJUTKAN</Button>
               </div>
           </div>
       )}
@@ -510,11 +454,10 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
       <div className="bg-[#0f4c81] text-white shadow-lg z-20 flex-shrink-0 relative border-b border-blue-900">
         <div className="container mx-auto px-4 h-[72px] flex justify-between items-center">
             <div className="flex flex-col min-w-0 mr-4">
-              <h1 className="font-bold text-lg md:text-xl leading-tight truncate tracking-wide text-white drop-shadow-sm">{exam.title}</h1>
+              <h1 className="font-bold text-lg md:text-xl leading-tight truncate text-white">{exam.title}</h1>
               <div className="flex items-center gap-2 text-xs md:text-sm text-blue-200 mt-1 truncate">
                 <UserIcon size={14} className="opacity-80" />
                 <span className="font-medium text-white">{user.fullName}</span>
-                <span className="text-blue-400 mx-1 hidden md:inline">•</span>
                 <span className="bg-blue-700/60 px-2 py-0.5 rounded-md border border-blue-600/50 text-blue-50 font-mono">{user.className || 'Peserta'}</span>
               </div>
             </div>
@@ -522,29 +465,19 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                <div className="flex flex-col items-end bg-gradient-to-b from-blue-800 to-blue-900 px-3 md:px-4 py-1.5 rounded-lg border border-blue-700 shadow-inner min-w-[100px]">
                   <span className="text-[10px] text-blue-300 uppercase font-bold tracking-widest hidden md:block mb-0.5">Sisa Waktu</span>
                   <div className={`font-mono text-xl md:text-2xl font-bold leading-none flex items-center gap-2 ${timeLeft < 300 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
-                     {timeLeft < 300 && <AlertTriangle size={16} className="md:hidden" />}
                      {formatTime(timeLeft)}
                   </div>
                </div>
-               <div className="h-8 w-px bg-blue-700/50 mx-1 hidden md:block"></div>
-               <Button variant="danger" onClick={() => setShowConfirmFinish(true)} className="h-10 md:h-11 px-4 md:px-5 text-xs md:text-sm font-bold shadow-lg border-b-4 border-red-800 hover:border-red-700 hover:translate-y-[1px] transition-all active:border-t-4 active:border-b-0 active:translate-y-1 whitespace-nowrap">
+               <Button variant="danger" onClick={() => setShowConfirmFinish(true)} className="h-10 md:h-11 px-4 md:px-5 text-xs md:text-sm font-bold shadow-lg border-b-4 border-red-800">
                  SELESAI
                </Button>
             </div>
         </div>
       </div>
 
-      {exam.mode === 'GOOGLE_FORM' && (
-        <div className="bg-yellow-50 text-yellow-900 text-sm px-4 py-2 text-center border-b border-yellow-200 flex items-center justify-center gap-2 shadow-sm z-10">
-            <Info size={16} />
-            <span>Setelah mengirim jawaban di formulir bawah ini, <b>JANGAN LUPA</b> klik tombol <b className="text-red-600">SELESAI</b> di pojok kanan atas aplikasi.</span>
-        </div>
-      )}
-
       <div className="flex-1 flex overflow-hidden relative">
           {exam.mode === 'GOOGLE_FORM' ? (
                <div className="flex-1 bg-white w-full h-full relative">
-                 {/* Invisible overlay to detect clicks if needed, though hard with iframe */}
                  {exam.googleFormUrl ? <iframe src={exam.googleFormUrl} className="w-full h-full border-none block" title="Google Form"></iframe> : <div className="p-10 text-center">URL Form Tidak Valid</div>}
                </div>
           ) : (
@@ -560,38 +493,53 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                               <div className="space-y-3">
                                 {currentQuestion.type === 'MULTIPLE_CHOICE' && currentQuestion.options?.map((opt, idx) => (
                                     <label key={idx} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'hover:bg-gray-50 border-gray-200'}`}>
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-4 text-sm ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>{String.fromCharCode(65 + idx)}</div>
-                                        <input type="radio" name={`q-${currentQuestion.id}`} className="hidden" checked={answers[currentQuestion.id] === idx.toString()} onChange={() => setAnswers(prev => ({...prev, [currentQuestion.id]: idx.toString()}))} />
-                                        <span className="text-gray-700 noselect">{opt}</span>
+                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center mr-3 ${answers[currentQuestion.id] === idx.toString() ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300'}`}>
+                                            {answers[currentQuestion.id] === idx.toString() && <div className="w-2 h-2 bg-white rounded-full" />}
+                                        </div>
+                                        <input 
+                                            type="radio" 
+                                            name={`q-${currentQuestion.id}`} 
+                                            className="hidden" 
+                                            checked={answers[currentQuestion.id] === idx.toString()} 
+                                            onChange={() => setAnswers({...answers, [currentQuestion.id]: idx.toString()})} 
+                                        />
+                                        <span className="text-gray-700">{opt}</span>
                                     </label>
                                 ))}
                                 {currentQuestion.type === 'ESSAY' && (
-                                    <textarea className="w-full border rounded-lg p-3 h-32 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Tulis jawaban Anda di sini..." value={answers[currentQuestion.id] || ''} onChange={(e) => setAnswers(prev => ({...prev, [currentQuestion.id]: e.target.value}))} />
+                                    <textarea 
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Ketik jawaban Anda..."
+                                        value={answers[currentQuestion.id] || ''}
+                                        onChange={e => setAnswers({...answers, [currentQuestion.id]: e.target.value})}
+                                    ></textarea>
                                 )}
-                                {currentQuestion.type === 'EXTERNAL_FORM' && (
-                                    <div className="p-4 bg-gray-50 border rounded text-center">
-                                        <p className="mb-2">Soal ini menggunakan Link Google Form Eksternal.</p>
-                                        <a href={currentQuestion.googleFormUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center justify-center gap-1">Buka Soal di Tab Baru <ChevronRight size={14} /></a>
-                                    </div>
-                                )}
-                              </div>
-                              <div className="flex justify-between mt-12 pt-6 border-t">
-                                  <Button variant="outline" disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(prev => prev - 1)}><ChevronLeft size={16} className="inline mr-1"/> Sebelumnya</Button>
-                                  <Button onClick={() => { if(currentQIndex < questions.length - 1) setCurrentQIndex(prev => prev + 1); else setShowConfirmFinish(true); }}>{currentQIndex === questions.length - 1 ? 'Selesai' : <>Selanjutnya <ChevronRight size={16} className="inline ml-1"/></>}</Button>
                               </div>
                           </div>
                       ) : (
-                          <div className="text-center py-20 text-gray-500"><p className="mb-4">Memuat soal...</p><Button variant="danger" onClick={() => setShowConfirmFinish(true)}>Akhiri Ujian</Button></div>
+                          <div className="text-center py-20 text-gray-400">{questions.length === 0 ? "Memuat soal..." : "Soal tidak ditemukan."}</div>
                       )}
                   </div>
-                  <div className="w-full md:w-72 bg-gray-50 border-l flex flex-col">
-                      <div className="p-4 font-bold text-gray-700 border-b bg-white flex items-center gap-2"><LayoutGrid size={18}/> Navigasi Soal</div>
-                      <div className="flex-1 p-4 overflow-y-auto">
-                          <div className="grid grid-cols-5 gap-2">
-                              {questions.map((q, idx) => (
-                                  <button key={q.id} onClick={() => setCurrentQIndex(idx)} className={`aspect-square rounded flex items-center justify-center font-bold text-sm transition-all ${currentQIndex === idx ? 'ring-2 ring-blue-600 z-10' : ''} ${answers[q.id] ? 'bg-[#0f4c81] text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'}`}>{idx + 1}</button>
-                              ))}
-                          </div>
+                  
+                  <div className="w-full md:w-72 bg-gray-50 border-l border-gray-200 p-4 flex flex-col">
+                      <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><LayoutGrid size={18} /> Navigasi Soal</h3>
+                      <div className="grid grid-cols-5 gap-2 overflow-y-auto max-h-[200px] md:max-h-full content-start">
+                          {questions.map((_, idx) => (
+                              <button 
+                                key={idx} 
+                                onClick={() => setCurrentQIndex(idx)}
+                                className={`aspect-square rounded flex items-center justify-center text-sm font-bold transition-colors ${
+                                    currentQIndex === idx ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1' : 
+                                    answers[questions[idx].id] ? 'bg-green-500 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-100'
+                                }`}
+                              >
+                                  {idx + 1}
+                              </button>
+                          ))}
+                      </div>
+                      <div className="mt-auto pt-4 flex gap-2">
+                              <Button variant="outline" className="flex-1 text-xs" onClick={() => setCurrentQIndex(Math.max(0, currentQIndex - 1))} disabled={currentQIndex === 0}>Prev</Button>
+                              <Button variant="outline" className="flex-1 text-xs" onClick={() => setCurrentQIndex(Math.min(questions.length - 1, currentQIndex + 1))} disabled={currentQIndex === questions.length - 1}>Next</Button>
                       </div>
                   </div>
               </div>
@@ -599,13 +547,13 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
       </div>
 
       <Modal isOpen={showConfirmFinish} onClose={() => setShowConfirmFinish(false)}>
-          <div className="text-center py-4">
-              <div className="bg-red-100 text-red-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32} /></div>
+          <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldAlert size={32} /></div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">Akhiri Ujian?</h3>
-              <p className="text-gray-600 mb-6">Apakah Anda yakin ingin mengakhiri ujian ini? <br/>{exam.mode === 'GOOGLE_FORM' ? "Pastikan Anda sudah mengirim (Submit) jawaban pada Google Form sebelum menekan tombol ini." : "Pastikan semua jawaban sudah terisi dengan benar."}</p>
-              <div className="flex gap-3 justify-center">
-                  <Button variant="outline" onClick={() => setShowConfirmFinish(false)}>Batal</Button>
-                  <Button variant="danger" onClick={() => { setShowConfirmFinish(false); calculateAndFinish(); }}>Ya, Saya Selesai</Button>
+              <p className="text-gray-600 text-sm mb-6">Pastikan Anda sudah memeriksa semua jawaban.</p>
+              <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowConfirmFinish(false)}>Batal</Button>
+                  <Button variant="danger" className="flex-1" onClick={() => calculateAndFinish('COMPLETED')}>Ya, Selesai</Button>
               </div>
           </div>
       </Modal>

@@ -1,6 +1,6 @@
 {
-  "name": "UJIAN GOOGLE FORM",
-  "description": "A comprehensive online exam platform featuring ANBK-style UI, exam management, question bank, and analytics.",
+  "name": "UJIAN GOOGLE FORM (ONLINE)",
+  "description": "CBT Application powered by Supabase Cloud Database. Features Exam Management, Real-time Monitoring, and Google Form Integration.",
   "requestFramePermissions": [
     "camera"
   ]
