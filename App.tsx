@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ReactNode, Component } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import { Login } from './pages/Login';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { StudentExam } from './pages/StudentExam';
@@ -14,7 +14,7 @@ interface ErrorBoundaryState {
 }
 
 // Error Boundary must be a Class Component
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = {
     hasError: false,
     errorMsg: ''

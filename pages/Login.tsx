@@ -230,7 +230,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         
         <div className="text-center mt-8 space-y-2">
           <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">&copy; 2025 SMK Muhammadiyah Kalibawang</p>
-          <p className="text-[10px] text-gray-300">Supported by ExamBit Engine</p>
         </div>
       </div>
     </div>
