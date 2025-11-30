@@ -127,9 +127,11 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
       <header className="bg-gradient-to-r from-blue-800 to-blue-600 text-white shadow-lg sticky top-0 z-20">
         <div className="container mx-auto px-4 lg:px-6 h-16 flex justify-between items-center">
             <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center backdrop-blur-sm border border-white/20">
-                    <BookOpen size={20} strokeWidth={2.5} />
-                </div>
+                <img 
+                    src="/logo.png" 
+                    alt="Logo" 
+                    className="w-10 h-10 object-contain bg-white/10 rounded-lg p-1 backdrop-blur-sm border border-white/20"
+                />
                 <div>
                     <h1 className="font-bold text-lg leading-tight hidden md:block tracking-wide">SMK Muhammadiyah Kalibawang</h1>
                     <h1 className="font-bold text-lg leading-tight md:hidden">CBT System</h1>
