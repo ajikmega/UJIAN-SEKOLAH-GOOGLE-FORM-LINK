@@ -1,3 +1,4 @@
+
 import { Exam, ExamResult, ClassGroup, User, Role, Question, ExamPackage } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -191,6 +192,16 @@ const apiDb = {
       
     if (error) handleError(error, 'Hapus Ujian');
     if (count === 0) throw new Error("Gagal menghapus: Data tidak ditemukan atau akses ditolak (Cek RLS).");
+
+    // FITUR REQUEST: Hapus data sesi siswa ketika ujian dihapus
+    const { error: sessionError } = await supabase
+      .from('sessions')
+      .delete()
+      .neq('student_name', '___'); // Delete all rows to clean up
+      
+    if (sessionError) {
+      console.warn("Gagal mereset sesi siswa online:", sessionError.message);
+    }
   },
 
   updateExamStatus: async (id: string, isActive: boolean) => {
