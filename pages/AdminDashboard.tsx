@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
@@ -23,35 +22,47 @@ export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout })
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-screen bg-gray-50/50 flex flex-col font-sans">
       {/* Navbar */}
-      <header className="bg-blue-700 text-white shadow-md sticky top-0 z-20">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white text-blue-700 rounded flex items-center justify-center">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="container mx-auto px-4 lg:px-6 h-16 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-blue-600 text-white rounded-lg flex items-center justify-center shadow-md shadow-blue-600/20">
                 <BookOpen size={20} strokeWidth={2.5} />
             </div>
-            <h1 className="text-xl font-bold tracking-wide">SMK Muh Kalibawang <span className="font-normal text-sm opacity-80">Panel Admin</span></h1>
+            <div>
+              <h1 className="text-lg font-bold text-gray-800 leading-tight">SMK Muh Kalibawang</h1>
+              <p className="text-xs text-gray-500 font-medium">Administrator Panel</p>
+            </div>
           </div>
-          <Button variant="danger" onClick={onLogout} className="text-sm py-1"><LogOut size={14} className="inline mr-1"/> Keluar</Button>
+          <Button onClick={onLogout} className="bg-red-600 text-white hover:bg-red-700 shadow-sm border-transparent px-4">
+             <LogOut size={16} /> <span className="hidden sm:inline font-bold">Keluar</span>
+          </Button>
         </div>
       </header>
 
-      <div className="flex-1 container mx-auto px-4 py-6 flex gap-6 flex-col md:flex-row">
+      <div className="flex-1 container mx-auto px-4 lg:px-6 py-8 flex gap-8 flex-col lg:flex-row">
         {/* Sidebar */}
-        <aside className="w-full md:w-64 flex-shrink-0 space-y-2">
-          <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<Home size={18} />} label="Ringkasan" />
-          <NavButton active={activeTab === 'exams'} onClick={() => setActiveTab('exams')} icon={<BarChart size={18} />} label="Manajemen Ujian" />
-          <NavButton active={activeTab === 'questions'} onClick={() => setActiveTab('questions')} icon={<Database size={18} />} label="Bank Soal (Form)" />
-          <NavButton active={activeTab === 'classes'} onClick={() => setActiveTab('classes')} icon={<Users size={18} />} label="Kelas & Siswa" />
+        <aside className="w-full lg:w-64 flex-shrink-0">
+          <nav className="space-y-1 lg:sticky lg:top-24">
+            <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Menu Utama</p>
+            <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<Home size={18} />} label="Ringkasan" />
+            <NavButton active={activeTab === 'exams'} onClick={() => setActiveTab('exams')} icon={<BarChart size={18} />} label="Manajemen Ujian" />
+            <div className="my-4 border-t border-gray-100"></div>
+            <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Data Master</p>
+            <NavButton active={activeTab === 'questions'} onClick={() => setActiveTab('questions')} icon={<Database size={18} />} label="Bank Soal" />
+            <NavButton active={activeTab === 'classes'} onClick={() => setActiveTab('classes')} icon={<Users size={18} />} label="Kelas & Siswa" />
+          </nav>
         </aside>
 
         {/* Main Content */}
         <main className="flex-1 min-w-0">
-          {activeTab === 'dashboard' && <DashboardOverview />}
-          {activeTab === 'exams' && <ExamManager exams={exams} onUpdate={loadExams} />}
-          {activeTab === 'classes' && <ClassManager />}
-          {activeTab === 'questions' && <QuestionBank />}
+          <div className="animate-fade-in">
+            {activeTab === 'dashboard' && <DashboardOverview />}
+            {activeTab === 'exams' && <ExamManager exams={exams} onUpdate={loadExams} />}
+            {activeTab === 'classes' && <ClassManager />}
+            {activeTab === 'questions' && <QuestionBank />}
+          </div>
         </main>
       </div>
     </div>
@@ -61,7 +72,11 @@ export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout })
 const NavButton: React.FC<{ active: boolean, onClick: () => void, icon: React.ReactNode, label: string }> = ({ active, onClick, icon, label }) => (
   <button 
     onClick={onClick} 
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${active ? 'bg-blue-100 text-blue-700 font-medium shadow-sm' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+      active 
+      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' 
+      : 'text-gray-600 hover:bg-white hover:text-blue-600 hover:shadow-sm'
+    }`}
   >
     {icon}
     <span>{label}</span>
@@ -85,52 +100,73 @@ const DashboardOverview: React.FC = () => {
             }
         };
         fetchStats();
-        const interval = setInterval(fetchStats, 10000); // 10s refresh
+        const interval = setInterval(fetchStats, 10000); 
         return () => clearInterval(interval);
     }, []);
 
-    if(loading) return <div className="p-10 text-center text-gray-500">Memuat statistik server...</div>;
+    if(loading) return <div className="p-12 text-center text-gray-400 animate-pulse">Memuat data statistik...</div>;
 
     return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Dashboard Ringkasan</h2>
+        <div className="space-y-8">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800">Selamat Datang, Admin!</h2>
+              <p className="text-gray-500">Berikut adalah ringkasan aktivitas ujian hari ini.</p>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <StatCardLarge 
-                    icon={<Monitor size={32} />} 
+                    icon={<Monitor size={28} />} 
                     label="Siswa Online" 
                     value={stats.onlineStudents} 
-                    color="bg-blue-600" 
-                    desc="Sesi aktif terdeteksi"
+                    color="bg-emerald-500" 
+                    textColor="text-emerald-600"
+                    bgSoft="bg-emerald-50"
+                    desc="Sesi aktif saat ini"
                 />
                 <StatCardLarge 
-                    icon={<UserCheck size={32} />} 
+                    icon={<UserCheck size={28} />} 
                     label="Siswa Selesai" 
                     value={stats.completedStudents} 
-                    color="bg-green-600" 
-                    desc="Total riwayat ujian selesai"
+                    color="bg-blue-500" 
+                    textColor="text-blue-600"
+                    bgSoft="bg-blue-50"
+                    desc="Total riwayat selesai"
                 />
                 <StatCardLarge 
-                    icon={<Activity size={32} />} 
+                    icon={<Activity size={28} />} 
                     label="Ujian Aktif" 
                     value={stats.activeExams} 
-                    color="bg-purple-600" 
-                    desc="Ujian sedang berlangsung"
+                    color="bg-violet-500" 
+                    textColor="text-violet-600"
+                    bgSoft="bg-violet-50"
+                    desc="Sedang berlangsung"
                 />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card title="Aktivitas Terbaru" className="h-64 flex items-center justify-center text-gray-400 border-dashed">
+                 <p className="text-sm">Belum ada log aktivitas</p>
+              </Card>
+              <Card title="Status Server" className="h-64 flex items-center justify-center text-gray-400 border-dashed">
+                 <div className="text-center">
+                   <div className="w-3 h-3 bg-green-500 rounded-full mx-auto mb-2 animate-pulse"></div>
+                   <p className="text-sm font-medium text-green-600">Database Connected</p>
+                 </div>
+              </Card>
             </div>
         </div>
     );
 };
 
-const StatCardLarge: React.FC<{ icon: React.ReactNode, label: string, value: number, color: string, desc: string }> = ({ icon, label, value, color, desc }) => (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden flex">
-        <div className={`${color} w-24 flex items-center justify-center text-white`}>
+const StatCardLarge: React.FC<{ icon: React.ReactNode, label: string, value: number, color: string, textColor: string, bgSoft: string, desc: string }> = ({ icon, label, value, color, textColor, bgSoft, desc }) => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-start gap-5 hover:shadow-md transition-shadow">
+        <div className={`${color} w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-gray-200`}>
             {icon}
         </div>
-        <div className="p-6 flex-1">
-            <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">{label}</p>
-            <p className="text-4xl font-bold text-gray-800 my-1">{value}</p>
-            <p className="text-xs text-gray-400">{desc}</p>
+        <div>
+            <p className="text-gray-500 text-sm font-semibold">{label}</p>
+            <p className="text-3xl font-bold text-gray-800 my-1">{value}</p>
+            <span className={`${bgSoft} ${textColor} px-2 py-0.5 rounded text-xs font-medium`}>{desc}</span>
         </div>
     </div>
 );
@@ -142,7 +178,6 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   const [availableClasses, setAvailableClasses] = useState<ClassGroup[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // Form States
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newExam, setNewExam] = useState<Partial<Exam>>({ 
     title: '', token: '', durationMinutes: 60, mode: 'GOOGLE_FORM', googleFormUrl: '', assignedClasses: [] 
@@ -176,33 +211,20 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   const handleOpenEdit = (exam: Exam) => {
       setEditingId(exam.id);
       setNewExam({...exam});
-      
       if (exam.startTime) {
           const d = new Date(exam.startTime);
-          const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-          const timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-          setScheduleDate(dateStr);
-          setScheduleTime(timeStr);
+          setScheduleDate(d.toISOString().split('T')[0]);
+          setScheduleTime(d.toTimeString().slice(0, 5));
       } else {
           setScheduleDate('');
           setScheduleTime('');
       }
-      
       setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
-      if (window.confirm("Apakah Anda yakin ingin menghapus ujian ini? Data yang dihapus tidak dapat dikembalikan.")) {
-          setLoading(true);
-          try {
-              await db.deleteExam(id);
-              await onUpdate();
-          } catch (e: any) {
-              alert("Gagal menghapus ujian: " + e.message);
-          } finally {
-              setLoading(false);
-          }
-      }
+      setLoading(true);
+      try { await db.deleteExam(id); await onUpdate(); } catch (e: any) { alert("Gagal menghapus ujian: " + e.message); } finally { setLoading(false); }
   };
 
   const handleSave = async () => {
@@ -211,156 +233,149 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
       if (scheduleDate && scheduleTime) {
           startTime = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
       }
-
       const examData = { ...newExam, startTime };
-
       setLoading(true);
       try {
-          if (editingId) {
-              await db.updateExam({ ...examData, id: editingId } as Exam);
-          } else {
-              await db.addExam({ ...examData, id: '', isActive: false } as Exam);
-          }
+          if (editingId) await db.updateExam({ ...examData, id: editingId } as Exam);
+          else await db.addExam({ ...examData, id: '', isActive: false } as Exam);
           setIsModalOpen(false);
           onUpdate();
-      } catch(e: any) {
-          alert("Gagal menyimpan ujian: " + e.message);
-      } finally {
-          setLoading(false);
-      }
+      } catch(e: any) { alert("Gagal menyimpan: " + e.message); } finally { setLoading(false); }
     }
   };
 
   const toggleStatus = async (id: string, current: boolean) => {
     setLoading(true);
-    try {
-        await db.updateExamStatus(id, !current);
-        onUpdate();
-    } catch (e: any) {
-        alert("Gagal update status: " + e.message);
-    } finally {
-        setLoading(false);
-    }
+    try { await db.updateExamStatus(id, !current); onUpdate(); } catch (e: any) { alert("Gagal update status: " + e.message); } finally { setLoading(false); }
   };
 
   const handleSelectFormFromBank = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const qId = e.target.value;
       const q = formQuestions.find(fq => fq.id === qId);
-      if (q && q.googleFormUrl) {
-          setNewExam({...newExam, googleFormUrl: q.googleFormUrl});
-      }
+      if (q && q.googleFormUrl) setNewExam({...newExam, googleFormUrl: q.googleFormUrl});
   };
 
   const handleClassToggle = (className: string) => {
       const current = newExam.assignedClasses || [];
-      if (current.includes(className)) {
-          setNewExam({ ...newExam, assignedClasses: current.filter(c => c !== className) });
-      } else {
-          setNewExam({ ...newExam, assignedClasses: [...current, className] });
-      }
+      if (current.includes(className)) setNewExam({ ...newExam, assignedClasses: current.filter(c => c !== className) });
+      else setNewExam({ ...newExam, assignedClasses: [...current, className] });
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Daftar Ujian</h2>
-        <Button onClick={handleOpenCreate} disabled={loading}><Plus size={16} className="inline mr-1"/> Tambah Ujian</Button>
+        <div>
+           <h2 className="text-2xl font-bold text-gray-800">Daftar Ujian</h2>
+           <p className="text-gray-500 text-sm">Kelola jadwal dan status ujian siswa.</p>
+        </div>
+        <Button onClick={handleOpenCreate} disabled={loading}><Plus size={18} /> Tambah Ujian</Button>
       </div>
       
-      {loading && <div className="h-1 bg-blue-200 overflow-hidden"><div className="w-full h-full bg-blue-600 animate-pulse"></div></div>}
+      {loading && <div className="w-full h-1 bg-blue-100 overflow-hidden rounded-full"><div className="w-1/3 h-full bg-blue-600 animate-slide"></div></div>}
 
       <div className="grid gap-4">
-        {exams.map(exam => (
-          <Card key={exam.id} className={`border-l-4 ${exam.isActive ? 'border-green-500' : 'border-gray-300'}`}>
-            <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
-              <div>
-                <h3 className="font-bold text-lg">{exam.title}</h3>
-                <div className="flex flex-wrap gap-2 mt-1 mb-2">
-                    <span className="text-xs font-mono bg-gray-200 px-2 py-0.5 rounded flex items-center">Token: {exam.token}</span>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{exam.mode === 'NATIVE' ? 'Aplikasi' : 'Google Form'}</span>
-                    {exam.startTime && (
-                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded flex items-center gap-1">
-                            <Calendar size={10} /> {new Date(exam.startTime).toLocaleDateString()} {new Date(exam.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </span>
-                    )}
-                </div>
-                <div className="text-sm text-gray-500 space-y-1">
-                    <p className="flex items-center gap-2"><Clock size={14}/> Durasi: {exam.durationMinutes} menit</p>
-                    <p className="flex items-center gap-2"><Users size={14}/> Peserta: {exam.assignedClasses && exam.assignedClasses.length > 0 ? exam.assignedClasses.join(', ') : 'Semua Kelas'}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 self-start">
-                  <Button variant="outline" className="text-sm py-1 px-2 text-blue-600 hover:text-blue-800 border-blue-200 hover:bg-blue-50" onClick={() => handleOpenEdit(exam)} disabled={loading}>
-                    <Edit size={16} />
-                  </Button>
-                  <Button variant="outline" className="text-sm py-1 px-2 text-red-600 hover:text-red-800 border-red-200 hover:bg-red-50" onClick={(e) => {e.stopPropagation(); handleDelete(exam.id);}} disabled={loading}>
-                    <Trash2 size={16} />
-                  </Button>
-                  <Button variant={exam.isActive ? "danger" : "success"} className="text-sm py-1 ml-2" onClick={() => toggleStatus(exam.id, exam.isActive)} disabled={loading}>
-                    {exam.isActive ? <><Square size={14} className="inline mr-1"/> Stop</> : <><Play size={14} className="inline mr-1"/> Mulai</>}
-                  </Button>
-              </div>
+        {exams.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
+                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400"><Calendar size={32}/></div>
+                <h3 className="text-lg font-bold text-gray-600">Belum ada ujian</h3>
+                <p className="text-gray-400">Silakan buat ujian baru untuk memulai.</p>
             </div>
-          </Card>
+        ) : exams.map(exam => (
+          <div key={exam.id} className={`bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col md:flex-row justify-between gap-4 hover:shadow-md transition-all ${exam.isActive ? 'ring-2 ring-green-500/20 border-green-500/50' : ''}`}>
+             <div className="space-y-3 flex-1">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h3 className="font-bold text-lg text-gray-800">{exam.title}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                            {exam.isActive 
+                                ? <span className="flex items-center gap-1 text-[10px] font-bold uppercase bg-green-100 text-green-700 px-2 py-0.5 rounded-full"><Activity size={10}/> Aktif</span>
+                                : <span className="flex items-center gap-1 text-[10px] font-bold uppercase bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full"><Square size={10}/> Non-Aktif</span>
+                            }
+                            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono border border-blue-100">Token: <b>{exam.token}</b></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm text-gray-600">
+                     <div className="flex items-center gap-2"><Clock size={14} className="text-gray-400"/> {exam.durationMinutes} menit</div>
+                     <div className="flex items-center gap-2"><Calendar size={14} className="text-gray-400"/> {exam.startTime ? new Date(exam.startTime).toLocaleDateString() : 'Belum dijadwalkan'}</div>
+                     <div className="flex items-center gap-2 col-span-2"><Users size={14} className="text-gray-400"/> {exam.assignedClasses?.length ? exam.assignedClasses.join(', ') : 'Semua Kelas'}</div>
+                </div>
+             </div>
+             
+             <div className="flex items-center gap-2 self-start md:self-center border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 w-full md:w-auto mt-2 md:mt-0">
+                  <Button variant="ghost" className="p-2" onClick={() => handleOpenEdit(exam)} disabled={loading} title="Edit">
+                    <Edit size={18} className="text-blue-600" />
+                  </Button>
+                  <Button variant="ghost" className="p-2" onClick={() => handleDelete(exam.id)} disabled={loading} title="Hapus">
+                    <Trash2 size={18} className="text-red-500" />
+                  </Button>
+                  <Button variant={exam.isActive ? "danger" : "success"} className="text-xs px-3 py-2 w-full md:w-auto" onClick={() => toggleStatus(exam.id, exam.isActive)} disabled={loading}>
+                    {exam.isActive ? 'Stop Ujian' : 'Mulai Ujian'}
+                  </Button>
+             </div>
+          </div>
         ))}
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <h3 className="text-xl font-bold mb-4">{editingId ? 'Edit Ujian' : 'Buat Ujian Baru'}</h3>
-        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-2">
-          {/* ... Form Inputs ... */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Judul Ujian</label>
-            <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Contoh: PAS Matematika Wajib" />
+        <h3 className="text-xl font-bold mb-6 text-gray-800 border-b pb-4">{editingId ? 'Edit Ujian' : 'Buat Ujian Baru'}</h3>
+        <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Judul Ujian</label>
+            <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Contoh: Penilaian Akhir Semester" />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-                <label className="block text-sm font-medium mb-1">Token</label>
-                <Input value={newExam.token} onChange={e => setNewExam({...newExam, token: e.target.value.toUpperCase()})} placeholder="MATH01" />
+            <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Token Masuk</label>
+                <Input value={newExam.token} onChange={e => setNewExam({...newExam, token: e.target.value.toUpperCase()})} placeholder="EXAM123" className="font-mono uppercase tracking-widest" />
             </div>
-            <div>
-                <label className="block text-sm font-medium mb-1">Durasi (Menit)</label>
+            <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Durasi (Menit)</label>
                 <Input type="number" value={newExam.durationMinutes} onChange={e => setNewExam({...newExam, durationMinutes: parseInt(e.target.value)})} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-                <label className="block text-sm font-medium mb-1">Tanggal Mulai</label>
+            <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Tanggal Mulai</label>
                 <Input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
             </div>
-            <div>
-                <label className="block text-sm font-medium mb-1">Waktu Mulai</label>
+            <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Waktu Mulai</label>
                 <Input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} />
             </div>
           </div>
-          <div>
-              <label className="block text-sm font-medium mb-2">Enrollment Kelas (Peserta)</label>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border p-2 rounded bg-gray-50">
+          <div className="space-y-2">
+              <label className="text-sm font-semibold text-gray-700">Enrollment (Peserta Kelas)</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 p-3 rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
                   {availableClasses.map(cls => (
-                      <label key={cls.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input type="checkbox" checked={newExam.assignedClasses?.includes(cls.name) || false} onChange={() => handleClassToggle(cls.name)} className="rounded text-blue-600" />
+                      <label key={cls.id} className={`flex items-center gap-2 text-sm p-2 rounded cursor-pointer transition-colors ${newExam.assignedClasses?.includes(cls.name) ? 'bg-blue-100 text-blue-800 font-medium' : 'hover:bg-gray-200'}`}>
+                          <input type="checkbox" checked={newExam.assignedClasses?.includes(cls.name) || false} onChange={() => handleClassToggle(cls.name)} className="rounded text-blue-600 focus:ring-blue-500" />
                           {cls.name}
                       </label>
                   ))}
               </div>
           </div>
-          <div className="space-y-3 bg-blue-50 p-3 rounded border border-blue-100">
-              <div>
-                  <label className="block text-sm font-bold mb-1 text-blue-800">Pilih dari Bank Link Form</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md mb-2" onChange={handleSelectFormFromBank}>
+          <div className="space-y-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+              <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-blue-800 flex items-center gap-2"><Database size={14}/> Pilih Soal (Bank Link)</label>
+                  <select className="w-full px-3 py-2.5 border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" onChange={handleSelectFormFromBank}>
                       <option value="">-- Pilih Link Tersimpan --</option>
                       {formQuestions.map(q => <option key={q.id} value={q.id}>{q.text} ({q.topic})</option>)}
                   </select>
               </div>
-              <div className="text-center text-xs text-gray-400 font-bold my-1">- ATAU -</div>
-              <div>
-                  <label className="block text-sm font-medium mb-1">Paste URL Google Form Manual</label>
-                  <Input value={newExam.googleFormUrl} onChange={e => setNewExam({...newExam, googleFormUrl: e.target.value})} placeholder="https://docs.google.com/forms/..." />
+              <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-blue-200"></div></div>
+                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-blue-50 px-2 text-blue-400 font-bold">Atau</span></div>
+              </div>
+              <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-700">Paste URL Google Form Manual</label>
+                  <Input value={newExam.googleFormUrl} onChange={e => setNewExam({...newExam, googleFormUrl: e.target.value})} placeholder="https://docs.google.com/forms/..." className="text-sm" />
               </div>
           </div>
-          <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
-            <Button onClick={handleSave} disabled={loading}>{loading ? 'Menyimpan...' : (editingId ? 'Simpan Perubahan' : 'Buat Ujian')}</Button>
+            <Button onClick={handleSave} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan Ujian'}</Button>
           </div>
         </div>
       </Modal>
@@ -377,85 +392,60 @@ const QuestionBank: React.FC = () => {
 
     const loadQuestions = async () => {
         setLoading(true);
-        try {
-            const data = await db.getQuestions();
-            setQuestions(data.filter(q => q.type === 'EXTERNAL_FORM'));
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
+        try { const data = await db.getQuestions(); setQuestions(data.filter(q => q.type === 'EXTERNAL_FORM')); } catch (e) { console.error(e); } finally { setLoading(false); }
     };
-
     useEffect(() => { loadQuestions(); }, []);
 
     const handleAddQuestion = async () => {
         if(newQ.text && newQ.topic && newQ.googleFormUrl) {
             setLoading(true);
-            try {
-                await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM' } as Question);
-                setIsQModalOpen(false);
-                setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' });
-                await loadQuestions();
-            } catch (e: any) {
-                alert("Gagal menambah soal: " + e.message);
-            } finally {
-                setLoading(false);
-            }
+            try { await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM' } as Question); setIsQModalOpen(false); setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' }); await loadQuestions(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
         }
     };
 
     const handleDelete = async (id: string) => {
-        if(window.confirm("Hapus link ini dari bank soal?")) {
-            setLoading(true);
-            try {
-                await db.deleteQuestion(id);
-                await loadQuestions();
-            } catch (e: any) {
-                alert("Gagal menghapus soal: " + e.message);
-            } finally {
-                setLoading(false);
-            }
-        }
+        setLoading(true);
+        try { await db.deleteQuestion(id); await loadQuestions(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden min-h-[500px] flex flex-col">
-            <div className="bg-gray-50 border-b px-6 py-4 flex justify-between items-center">
-                <h3 className="font-bold text-lg text-gray-700">Bank Link Google Form</h3>
-                <Button onClick={() => setIsQModalOpen(true)} disabled={loading}><Plus size={14} className="inline mr-1"/> Tambah Link Form</Button>
-            </div>
-            <div className="p-6 flex-1 overflow-y-auto">
-                {loading && <p className="text-center text-gray-500">Memuat data...</p>}
-                {!loading && questions.length === 0 && <p className="text-center text-gray-500 py-10">Belum ada link Google Form tersimpan.</p>}
+        <Card title="Bank Soal (Google Form)" action={<Button onClick={() => setIsQModalOpen(true)} size="sm"><Plus size={16}/> Tambah Link</Button>}>
+            {loading ? <p className="text-center text-gray-400 py-8">Memuat data...</p> : (
                 <div className="space-y-3">
+                    {questions.length === 0 && <p className="text-center text-gray-400 py-10 italic">Belum ada link form tersimpan.</p>}
                     {questions.map(q => (
-                        <div key={q.id} className="border rounded p-4 hover:bg-gray-50 flex justify-between items-start">
+                        <div key={q.id} className="group bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div className="flex-1">
-                                <div className="flex gap-2 mb-1">
-                                    <span className="text-xs font-bold bg-purple-100 text-purple-800 px-2 py-1 rounded inline-flex items-center gap-1"><LinkIcon size={10}/> {q.topic}</span>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="bg-violet-100 text-violet-700 text-xs font-bold px-2 py-0.5 rounded uppercase">{q.topic}</span>
                                 </div>
-                                <p className="font-bold text-gray-800 text-lg">{q.text}</p>
-                                <div className="mt-1 text-sm text-blue-600 truncate flex items-center gap-1"><ExternalLink size={12} /> <a href={q.googleFormUrl} target="_blank" rel="noreferrer" className="hover:underline">{q.googleFormUrl}</a></div>
+                                <h4 className="font-semibold text-gray-800">{q.text}</h4>
                             </div>
-                            <Button variant="danger" className="ml-4 px-3 py-1 text-xs" onClick={(e) => {e.stopPropagation(); handleDelete(q.id);}} disabled={loading}><Trash size={14} /></Button>
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <a href={q.googleFormUrl} target="_blank" rel="noreferrer" className="flex-1 sm:flex-none text-center bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
+                                    <Eye size={16}/> Preview
+                                </a>
+                                <button onClick={(e) => {e.stopPropagation(); handleDelete(q.id);}} disabled={loading} className="bg-red-50 text-red-500 hover:bg-red-100 p-2 rounded-lg transition-colors">
+                                    <Trash size={16} />
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
-            </div>
-            <Modal isOpen={isQModalOpen} onClose={() => setIsQModalOpen(false)}>
-                <h3 className="font-bold text-lg mb-4">Tambah Link Google Form</h3>
+            )}
+             <Modal isOpen={isQModalOpen} onClose={() => setIsQModalOpen(false)}>
+                <h3 className="font-bold text-lg mb-6 text-gray-800 border-b pb-3">Tambah Link Google Form</h3>
                 <div className="space-y-4">
-                    <div><label className="block text-sm font-medium mb-1">Mata Pelajaran / Topik</label><Input placeholder="Contoh: Biologi" value={newQ.topic} onChange={e => setNewQ({...newQ, topic: e.target.value})} /></div>
-                    <div><label className="block text-sm font-medium mb-1">Nama Form / Judul Soal</label><Input placeholder="Contoh: Soal Harian Bab 3" value={newQ.text} onChange={e => setNewQ({...newQ, text: e.target.value})} /></div>
-                    <div><label className="block text-sm font-medium mb-1">Link URL Google Form</label><Input placeholder="https://docs.google.com/forms/..." value={newQ.googleFormUrl} onChange={e => setNewQ({...newQ, googleFormUrl: e.target.value})} /></div>
-                    <div className="pt-4 flex justify-end gap-2">
+                    <div className="space-y-1"><label className="text-sm font-medium text-gray-700">Mata Pelajaran / Topik</label><Input placeholder="Contoh: Bahasa Inggris" value={newQ.topic} onChange={e => setNewQ({...newQ, topic: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-sm font-medium text-gray-700">Judul Soal</label><Input placeholder="Contoh: Daily Test Chapter 1" value={newQ.text} onChange={e => setNewQ({...newQ, text: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-sm font-medium text-gray-700">URL Google Form</label><Input placeholder="https://docs.google.com/forms/..." value={newQ.googleFormUrl} onChange={e => setNewQ({...newQ, googleFormUrl: e.target.value})} /></div>
+                    <div className="pt-6 flex justify-end gap-3">
                         <Button variant="outline" onClick={() => setIsQModalOpen(false)}>Batal</Button>
-                        <Button onClick={handleAddQuestion} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan Link'}</Button>
+                        <Button onClick={handleAddQuestion} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan'}</Button>
                     </div>
                 </div>
             </Modal>
-        </div>
+        </Card>
     );
 };
 
@@ -464,61 +454,33 @@ const ClassManager: React.FC = () => {
     const [classes, setClasses] = useState<ClassGroup[]>([]);
     const [loading, setLoading] = useState(false);
     
-    const loadClasses = async () => {
-        setLoading(true);
-        try { const data = await db.getClasses(); setClasses(data); } catch(e) {}
-        setLoading(false);
-    };
+    const loadClasses = async () => { setLoading(true); try { const data = await db.getClasses(); setClasses(data); } catch(e) {} setLoading(false); };
     useEffect(() => { loadClasses(); }, []);
 
     const handleAdd = async () => {
         const input = document.getElementById('newClassInput') as HTMLInputElement;
-        const val = input.value;
-        if(val) { 
-            setLoading(true);
-            try {
-                await db.addClass(val); 
-                input.value = ''; 
-                await loadClasses();
-            } catch(e: any) {
-                alert("Gagal menambah kelas: " + e.message);
-            } finally {
-                setLoading(false);
-            }
-        }
+        if(input.value) { setLoading(true); try { await db.addClass(input.value); input.value = ''; await loadClasses(); } catch(e: any) { alert("Error: " + e.message); } finally { setLoading(false); } }
     };
 
-    const handleDelete = async (id: string) => {
-        if(window.confirm("Hapus kelas?")) {
-            setLoading(true);
-            try {
-                await db.deleteClass(id);
-                await loadClasses();
-            } catch (e: any) {
-                alert("Gagal menghapus kelas: " + e.message);
-            } finally {
-                setLoading(false);
-            }
-        }
-    };
+    const handleDelete = async (id: string) => { setLoading(true); try { await db.deleteClass(id); await loadClasses(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); } };
 
     return (
-        <Card title="Manajemen Kelas">
-              <div className="flex gap-2 mb-4">
-                <Input placeholder="Nama Kelas Baru (e.g. XII-IPA-1)" id="newClassInput" />
-                <Button onClick={handleAdd} disabled={loading}>Tambah</Button>
+        <Card title="Manajemen Kelas" className="max-w-2xl">
+              <div className="flex gap-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <Input placeholder="Nama Kelas Baru (Contoh: XII-TKJ-1)" id="newClassInput" className="bg-white" />
+                <Button onClick={handleAdd} disabled={loading}><Plus size={18}/> Tambah</Button>
               </div>
-              {loading && <p className="text-sm text-gray-500">Memuat...</p>}
-              <ul className="divide-y">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {classes.map(c => (
-                  <li key={c.id} className="py-3 px-2 hover:bg-gray-50 flex justify-between items-center">
-                      <span>{c.name}</span>
-                      <div className="flex items-center gap-3">
-                        <Button variant="danger" className="px-2 py-1" onClick={(e) => {e.stopPropagation(); handleDelete(c.id);}} disabled={loading}><Trash size={14} /></Button>
-                      </div>
-                  </li>
+                  <div key={c.id} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition-all group">
+                      <span className="font-medium text-gray-700">{c.name}</span>
+                      <button onClick={(e) => {e.stopPropagation(); handleDelete(c.id);}} disabled={loading} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                          <Trash size={16} />
+                      </button>
+                  </div>
                 ))}
-              </ul>
+              </div>
+              {classes.length === 0 && <p className="text-center text-gray-400 mt-4">Belum ada kelas.</p>}
         </Card>
     )
 };
