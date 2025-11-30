@@ -27,11 +27,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout })
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="container mx-auto px-4 lg:px-6 h-16 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <img 
-                src="/logo.png" 
-                alt="Logo SMK" 
-                className="w-10 h-10 object-contain hover:scale-110 transition-transform"
-            />
+            <div className="w-9 h-9 bg-blue-600 text-white rounded-lg flex items-center justify-center shadow-md shadow-blue-600/20">
+                <BookOpen size={20} strokeWidth={2.5} />
+            </div>
             <div>
               <h1 className="text-lg font-bold text-gray-800 leading-tight">SMK Muh Kalibawang</h1>
               <p className="text-xs text-gray-500 font-medium">Administrator Panel</p>

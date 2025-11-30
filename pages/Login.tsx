@@ -106,12 +106,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4 font-sans">
       <div className="w-full max-w-md">
         
-        <div className="text-center mb-8">
-          <img 
-            src="/logo.png" 
-            alt="Logo SMK Muhammadiyah Kalibawang" 
-            className="w-28 h-28 mx-auto mb-6 object-contain drop-shadow-md hover:scale-105 transition-transform duration-300"
-          />
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/30 mb-6 transform -rotate-3">
+             <GraduationCap className="text-white" size={32} />
+          </div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">SMK Muh Kalibawang</h1>
           <p className="text-blue-600 font-medium mt-2 bg-blue-50 inline-block px-3 py-1 rounded-full text-sm">Computer Based Test</p>
         </div>
