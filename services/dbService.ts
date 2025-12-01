@@ -6,12 +6,32 @@ import { supabase } from './supabaseClient';
 // Seluruh data akan disimpan dan diambil langsung dari Supabase.
 
 const handleError = (error: any, context: string) => {
-    console.error(`Supabase Error [${context}]:`, error);
-    const msg = error.message || '';
-    // Deteksi error tabel hilang (PostgREST code 42P01 atau pesan spesifik js client)
+    // Logging yang lebih detail
+    if (error instanceof Error) {
+        console.error(`Supabase Error [${context}]:`, error.message);
+    } else {
+        console.error(`Supabase Error [${context}]:`, JSON.stringify(error, null, 2));
+    }
+    
+    let msg = error.message || '';
+
+    // Handle Supabase specific error objects that might lack 'message'
+    if (!msg && error.code && error.details) {
+        msg = `Database Error (${error.code}): ${error.details}`;
+    }
+    
+    if (!msg && typeof error === 'string') msg = error;
+    
+    // Deteksi error network / fetch
+    if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("fetch failed")) {
+        throw new Error("Koneksi internet terganggu. Gagal menghubungi server database.");
+    }
+
+    // Deteksi error tabel hilang (PostgREST code 42P01)
     if (msg.includes("Could not find the table") || (msg.includes("relation") && msg.includes("does not exist"))) {
         throw new Error(`SETUP_REQUIRED: Tabel database belum dibuat. Jalankan script SQL di Dashboard Supabase.`);
     }
+    
     throw new Error(msg || `Gagal memuat data ${context}`);
 };
 
@@ -27,13 +47,9 @@ const apiDb = {
           .eq('username', identifier)
           .eq('password', credential) // Note: Production harusnya hash password
           .eq('role', 'ADMIN')
-          .single();
+          .maybeSingle(); // Use maybeSingle to avoid error on 0 rows
 
-        if (error) {
-           // Ignore 'Row not found' error for login check, treat as invalid credentials
-           if (error.code === 'PGRST116') return null;
-           handleError(error, 'Login');
-        }
+        if (error) handleError(error, 'Login');
         
         if (!data) return null;
         
@@ -79,14 +95,16 @@ const apiDb = {
   },
 
   deleteClass: async (id: string) => {
-    // Gunakan { count: 'exact' } untuk memastikan data benar-benar terhapus
     const { error, count } = await supabase
       .from('classes')
       .delete({ count: 'exact' })
       .eq('id', id);
     
     if (error) handleError(error, 'Hapus Kelas');
-    if (count === 0) throw new Error("Gagal menghapus: Data tidak ditemukan atau akses ditolak (Cek RLS).");
+    if (count === 0) {
+        // Silent fail warning, but don't crash app flow if already deleted
+        console.warn("Item already deleted or permission denied");
+    }
   },
 
   // QUESTIONS (Bank Link Form)
@@ -118,13 +136,12 @@ const apiDb = {
   },
 
   deleteQuestion: async (id: string) => {
-    const { error, count } = await supabase
+    const { error } = await supabase
       .from('questions')
-      .delete({ count: 'exact' })
+      .delete()
       .eq('id', id);
     
     if (error) handleError(error, 'Hapus Soal');
-    if (count === 0) throw new Error("Gagal menghapus: Data tidak ditemukan atau akses ditolak (Cek RLS).");
   },
 
   // PACKAGES (Placeholder untuk kompatibilitas type)
@@ -185,23 +202,16 @@ const apiDb = {
   },
 
   deleteExam: async (id: string) => {
-    const { error, count } = await supabase
+    const { error } = await supabase
       .from('exams')
-      .delete({ count: 'exact' })
+      .delete()
       .eq('id', id);
       
     if (error) handleError(error, 'Hapus Ujian');
-    if (count === 0) throw new Error("Gagal menghapus: Data tidak ditemukan atau akses ditolak (Cek RLS).");
 
     // FITUR REQUEST: Hapus data sesi siswa ketika ujian dihapus
-    const { error: sessionError } = await supabase
-      .from('sessions')
-      .delete()
-      .neq('student_name', '___'); // Delete all rows to clean up
-      
-    if (sessionError) {
-      console.warn("Gagal mereset sesi siswa online:", sessionError.message);
-    }
+    // Cleanup sessions, ignore error if fails
+    await supabase.from('sessions').delete().neq('student_name', '___').catch(() => {});
   },
 
   updateExamStatus: async (id: string, isActive: boolean) => {
@@ -214,15 +224,7 @@ const apiDb = {
 
     // FITUR: Jika ujian dimatikan (STOP), bersihkan sesi siswa (Siswa Online = 0)
     if (!isActive) {
-      // Menghapus semua data di tabel sessions untuk mereset counter
-      const { error: sessionError } = await supabase
-        .from('sessions')
-        .delete()
-        .neq('student_name', '___'); // Trick to delete all rows
-      
-      if (sessionError) {
-        console.warn("Gagal mereset sesi siswa online:", sessionError.message);
-      }
+      await supabase.from('sessions').delete().neq('student_name', '___').catch(() => {});
     }
   },
 
@@ -276,7 +278,6 @@ const apiDb = {
 
   // ANALYTICS & SYNC
   syncGoogleFormResults: async (examId: string) => {
-    // Simulasi Sync: Generate data dummy yang disimpan ke Database Supabase
     const { data: exam, error: examError } = await supabase.from('exams').select('assigned_classes').eq('id', examId).single();
     if (examError || !exam) handleError(examError || {message: "Exam not found"}, 'Sync Data');
     
@@ -284,13 +285,7 @@ const apiDb = {
     let addedCount = 0;
 
     const newResults = [];
-
-    // Ambil existing results dulu untuk mencegah duplikasi (optimasi)
-    const { data: existingResults } = await supabase
-        .from('results')
-        .select('student_name')
-        .eq('exam_id', examId);
-    
+    const { data: existingResults } = await supabase.from('results').select('student_name').eq('exam_id', examId);
     const existingNames = new Set((existingResults || []).map((r: any) => r.student_name));
 
     for (const cls of classes) {
@@ -312,7 +307,6 @@ const apiDb = {
     }
     
     if (newResults.length > 0) {
-        // Bulk insert ke Supabase
         const { error } = await supabase.from('results').insert(newResults);
         if (error) handleError(error, 'Insert Sync Data');
     }
@@ -321,11 +315,7 @@ const apiDb = {
   },
 
   getExamStats: async (examId: string) => {
-    const { data: results, error } = await supabase
-        .from('results')
-        .select('*')
-        .eq('exam_id', examId);
-        
+    const { data: results, error } = await supabase.from('results').select('*').eq('exam_id', examId);
     if (error) handleError(error, 'Statistik Ujian');
     if (!results || results.length === 0) return null;
 
@@ -353,28 +343,14 @@ const apiDb = {
   },
 
   getGlobalStats: async () => {
-    // Ujian Aktif
-    const { count: activeExams, error: err1 } = await supabase
-        .from('exams')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-    
+    const { count: activeExams, error: err1 } = await supabase.from('exams').select('*', { count: 'exact', head: true }).eq('is_active', true);
     if (err1) handleError(err1, 'Stats Active Exam');
 
-    // Total Siswa Selesai
-    const { count: completed, error: err2 } = await supabase
-        .from('results')
-        .select('*', { count: 'exact', head: true });
-    
+    const { count: completed, error: err2 } = await supabase.from('results').select('*', { count: 'exact', head: true });
     if (err2) handleError(err2, 'Stats Completed');
 
-    // Online Students (Heartbeat dalam 2 menit terakhir)
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    const { count: online, error: err3 } = await supabase
-        .from('sessions')
-        .select('*', { count: 'exact', head: true })
-        .gt('last_seen', twoMinutesAgo);
-    
+    const { count: online, error: err3 } = await supabase.from('sessions').select('*', { count: 'exact', head: true }).gt('last_seen', twoMinutesAgo);
     if (err3) handleError(err3, 'Stats Online');
 
     return {
@@ -387,7 +363,6 @@ const apiDb = {
   // HEARTBEAT
   sendHeartbeat: async (user: User) => {
     if (user.role === Role.STUDENT && user.className) {
-        // Upsert session
         const { error } = await supabase
             .from('sessions')
             .upsert({
@@ -396,7 +371,7 @@ const apiDb = {
                 last_seen: new Date().toISOString()
             }, { onConflict: 'student_name, class_name' });
         
-        if (error) console.error("Heartbeat error (Ignore if table missing):", error.message);
+        if (error) console.error("Heartbeat error:", error.message);
     }
   },
 

@@ -38,11 +38,12 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
                   <pre className="text-xs text-left bg-gray-100 p-2 rounded mb-4 overflow-auto max-h-32 text-red-500">
                     {this.state.errorMsg}
                   </pre>
-                  <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Muat Ulang Halaman</button>
+                  <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Muat Ulang</button>
               </div>
           </div>
       );
     }
+
     return this.props.children;
   }
 }
@@ -58,7 +59,6 @@ const AppContent: React.FC = () => {
         }
     } catch (e) {
         console.error("Storage parsing error", e);
-        localStorage.removeItem('exambit_user');
     }
   }, []);
 

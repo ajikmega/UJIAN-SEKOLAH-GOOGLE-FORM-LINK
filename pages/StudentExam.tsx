@@ -45,19 +45,25 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   const fetchExams = async () => {
     try {
-        const [allExams, allResults] = await Promise.all([db.getExams(), db.getResults()]);
+        // HAPUS LOGIC RESULT: Tidak lagi mengambil data results
+        const allExams = await db.getExams();
         const now = new Date();
+        
         const filtered = allExams.filter(exam => {
             if (!exam.isActive) return false;
+            
+            // Cek Kelas
             if (exam.assignedClasses && exam.assignedClasses.length > 0) {
                 if (!user.className || !exam.assignedClasses.includes(user.className)) return false;
             }
+            
+            // Cek Waktu
             if (exam.startTime) {
                 const start = new Date(exam.startTime);
                 if (now < start) return false;
             }
-            const isDone = allResults.some(r => r.examId === exam.id && r.studentName === (user.fullName || user.username));
-            if (isDone) return false;
+            
+            // HAPUS LOGIC CEK SELESAI: Ujian selalu tampil (karena data selesai ada di GForm)
             return true;
         });
         setAvailableExams(filtered);
@@ -89,8 +95,14 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const handleFinish = async (score?: number, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED', violationCount = 0) => {
     if (activeExam) {
       if (document.fullscreenElement) document.exitFullscreen().catch(err => console.error(err));
-      const resultData = { examId: activeExam.id, studentName: user.fullName || user.username, className: user.className || 'Unknown', completedAt: new Date().toISOString(), status: status, score: score !== undefined ? score : 0, violationCount: violationCount };
-      try { await db.submitExam(resultData); localStorage.removeItem('exambit_active_exam'); localStorage.removeItem('exambit_exam_start_timestamp'); setIsExamFinished(true); setActiveExam(null); } catch(e) { alert("Gagal menyimpan. Cek koneksi."); }
+      
+      // HAPUS LOGIC SIMPAN RESULT KE DATABASE
+      // Aplikasi hanya membersihkan state lokal
+      
+      localStorage.removeItem('exambit_active_exam'); 
+      localStorage.removeItem('exambit_exam_start_timestamp'); 
+      setIsExamFinished(true); 
+      setActiveExam(null); 
     }
   };
 
@@ -103,10 +115,10 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
           <div className="w-24 h-24 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner ring-4 ring-green-100">
             <CheckCircle size={48} strokeWidth={3} />
           </div>
-          <h2 className="text-3xl font-extrabold text-gray-800 mb-3 tracking-tight">Ujian Selesai!</h2>
+          <h2 className="text-3xl font-extrabold text-gray-800 mb-3 tracking-tight">Sesi Berakhir</h2>
           <p className="text-gray-500 mb-10 leading-relaxed">
-            Jawaban Anda telah berhasil tersimpan di server.<br/>
-            Terima kasih telah mengerjakan ujian ini.
+            Anda telah keluar dari ruang ujian.<br/>
+            Pastikan Anda sudah menekan <b>Submit</b> pada Google Form.
           </p>
           <Button 
             onClick={handleReturnToDashboard} 
@@ -163,7 +175,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
             <div className="flex flex-col items-center justify-center bg-white rounded-2xl shadow-sm p-16 text-center border-2 border-dashed border-gray-200">
                 <div className="bg-gray-50 p-4 rounded-full mb-4 text-gray-400"><Calendar size={32} /></div>
                 <h3 className="text-lg font-bold text-gray-700">Tidak Ada Ujian Aktif</h3>
-                <p className="text-gray-500 max-w-sm mt-2 mb-6">Jadwal ujian untuk kelas Anda belum tersedia atau Anda telah menyelesaikan semua sesi.</p>
+                <p className="text-gray-500 max-w-sm mt-2 mb-6">Jadwal ujian untuk kelas Anda belum tersedia saat ini.</p>
                 <Button variant="ghost" onClick={handleRefresh} className="text-blue-600">Coba Refresh Lagi</Button>
             </div>
         ) : (
@@ -349,7 +361,13 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                   </div>
                </div>
                <div className="md:hidden font-mono font-bold bg-blue-800 px-2 py-1 rounded text-sm">{formatTime(timeLeft)}</div>
-               <Button variant="danger" onClick={() => setShowConfirmFinish(true)} className="h-9 text-xs font-bold shadow-md bg-red-600 hover:bg-red-700 border-none">SELESAI</Button>
+               
+               <Button 
+                onClick={() => setShowConfirmFinish(true)} 
+                className="h-10 text-xs font-bold shadow-md bg-white text-blue-800 hover:bg-blue-50 border-none flex items-center gap-2"
+               >
+                 <LayoutGrid size={16} /> <span className="hidden md:inline">Kembali ke Dashboard</span><span className="md:hidden">Dashboard</span>
+               </Button>
             </div>
         </div>
       </div>
@@ -357,7 +375,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
       <div className="flex-1 flex overflow-hidden relative">
           {exam.mode === 'GOOGLE_FORM' ? (
                <div className="flex-1 bg-white w-full h-full relative">
-                 {exam.googleFormUrl ? <iframe src={exam.googleFormUrl} className="w-full h-full border-none block" title="Google Form"></iframe> : <div className="p-10 text-center">URL Form Tidak Valid</div>}
+                 {exam.googleFormUrl ? <iframe src={exam.googleFormUrl} className="w-full h-full border-none block" title="Google Form" allow="fullscreen"></iframe> : <div className="p-10 text-center">URL Form Tidak Valid</div>}
                </div>
           ) : (
               <div className="flex-1 flex flex-col md:flex-row h-full">
@@ -417,12 +435,14 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
 
       <Modal isOpen={showConfirmFinish} onClose={() => setShowConfirmFinish(false)}>
           <div className="text-center py-4">
-              <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce-slow"><ShieldAlert size={40} /></div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-2">Yakin Ingin Mengakhiri?</h3>
-              <p className="text-gray-500 mb-8 max-w-xs mx-auto">Pastikan Anda telah menjawab semua soal dan memeriksa ulang jawaban.</p>
+              <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6"><LayoutGrid size={40} /></div>
+              <h3 className="text-2xl font-bold text-gray-800 mb-2">Kembali ke Dashboard?</h3>
+              <p className="text-gray-500 mb-8 max-w-xs mx-auto">
+                 Pastikan Anda telah mengirim jawaban di Google Form (<b>Submit</b>) sebelum keluar dari halaman ini.
+              </p>
               <div className="flex gap-4">
-                  <Button variant="outline" className="flex-1 py-3" onClick={() => setShowConfirmFinish(false)}>Periksa Lagi</Button>
-                  <Button variant="danger" className="flex-1 py-3 shadow-lg shadow-red-500/30" onClick={() => calculateAndFinish('COMPLETED')}>Ya, Kumpulkan</Button>
+                  <Button variant="outline" className="flex-1 py-3" onClick={() => setShowConfirmFinish(false)}>Batal</Button>
+                  <Button className="flex-1 py-3 shadow-lg" onClick={() => calculateAndFinish('COMPLETED')}>Ya, Kembali</Button>
               </div>
           </div>
       </Modal>
