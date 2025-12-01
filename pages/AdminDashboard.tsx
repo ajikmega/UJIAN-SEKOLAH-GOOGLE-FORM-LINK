@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, RefreshCw } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
@@ -200,11 +201,27 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
       }
   }, [isModalOpen]);
 
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setScheduleDate(e.target.value);
+  };
+
   const handleOpenCreate = () => {
       setEditingId(null);
-      setNewExam({ title: '', token: '', durationMinutes: 60, mode: 'GOOGLE_FORM', googleFormUrl: '', assignedClasses: [] });
-      setScheduleDate('');
-      setScheduleTime('');
+      // Set default to today
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0];
+      
+      setScheduleDate(dateStr);
+      setScheduleTime('07:30');
+      
+      setNewExam({ 
+          title: '', 
+          token: '', 
+          durationMinutes: 60, 
+          mode: 'GOOGLE_FORM', 
+          googleFormUrl: '', 
+          assignedClasses: [] 
+      });
       setIsModalOpen(true);
   };
 
@@ -325,26 +342,34 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
             <label className="text-sm font-semibold text-gray-700">Judul Ujian</label>
             <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Contoh: Penilaian Akhir Semester" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Token Masuk</label>
-                <Input value={newExam.token} onChange={e => setNewExam({...newExam, token: e.target.value.toUpperCase()})} placeholder="EXAM123" className="font-mono uppercase tracking-widest" />
-            </div>
-            <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Durasi (Menit)</label>
-                <Input type="number" value={newExam.durationMinutes} onChange={e => setNewExam({...newExam, durationMinutes: parseInt(e.target.value)})} />
-            </div>
-          </div>
+          
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-gray-700">Tanggal Mulai</label>
-                <Input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+                <Input type="date" value={scheduleDate} onChange={handleDateChange} />
             </div>
             <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-gray-700">Waktu Mulai</label>
                 <Input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Token</label>
+                <Input 
+                    value={newExam.token} 
+                    onChange={e => setNewExam({...newExam, token: e.target.value.toUpperCase()})}
+                    placeholder="TOKEN123"
+                    className="font-mono uppercase tracking-widest" 
+                />
+            </div>
+            <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Durasi (Menit)</label>
+                <Input type="number" value={newExam.durationMinutes} onChange={e => setNewExam({...newExam, durationMinutes: parseInt(e.target.value)})} />
+            </div>
+          </div>
+
           <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700">Enrollment (Peserta Kelas)</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 p-3 rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
