@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, AlertTriangle, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Info, Key, User as UserIcon, LogOut, LayoutGrid, BookOpen, AlertOctagon, ShieldAlert, Maximize, FileText, Home } from 'lucide-react';
+import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, AlertOctagon } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -10,31 +11,32 @@ interface Props {
 }
 
 export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
-  const [activeExam, setActiveExam] = useState<Exam | null>(null);
+  // FIX: Lazy initialization untuk mencegah kedipan (flash) ke dashboard saat refresh
+  const [activeExam, setActiveExam] = useState<Exam | null>(() => {
+    try {
+        const savedExamStr = localStorage.getItem('exambit_active_exam');
+        if (savedExamStr) {
+            const savedExam = JSON.parse(savedExamStr);
+            // Security check: pastikan ujian milik user yang sedang login
+            if (savedExam._studentUser === user.username) {
+                return savedExam;
+            } else {
+                localStorage.removeItem('exambit_active_exam');
+                localStorage.removeItem('exambit_exam_start_timestamp');
+            }
+        }
+    } catch (e) {
+        localStorage.removeItem('exambit_active_exam');
+    }
+    return null;
+  });
+
   const [availableExams, setAvailableExams] = useState<Exam[]>([]);
   const [isExamFinished, setIsExamFinished] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [inputToken, setInputToken] = useState('');
   const [tokenError, setTokenError] = useState('');
-
-  useEffect(() => {
-    const savedExamStr = localStorage.getItem('exambit_active_exam');
-    if (savedExamStr) {
-      try {
-        const savedExam = JSON.parse(savedExamStr);
-        if (savedExam._studentUser === user.username) {
-            setActiveExam(savedExam);
-        } else {
-            localStorage.removeItem('exambit_active_exam');
-            localStorage.removeItem('exambit_exam_start_timestamp');
-        }
-      } catch (e) {
-        localStorage.removeItem('exambit_active_exam');
-        localStorage.removeItem('exambit_exam_start_timestamp');
-      }
-    }
-  }, [user.username]);
 
   useEffect(() => {
     const sendSignal = async () => { try { await db.sendHeartbeat(user); } catch(e) { } };
@@ -45,7 +47,6 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   const fetchExams = async () => {
     try {
-        // HAPUS LOGIC RESULT: Tidak lagi mengambil data results
         const allExams = await db.getExams();
         const now = new Date();
         
@@ -63,7 +64,6 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
                 if (now < start) return false;
             }
             
-            // HAPUS LOGIC CEK SELESAI: Ujian selalu tampil (karena data selesai ada di GForm)
             return true;
         });
         setAvailableExams(filtered);
@@ -71,7 +71,15 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   };
 
   const handleRefresh = async () => { setIsRefreshing(true); await fetchExams(); setIsRefreshing(false); };
-  useEffect(() => { fetchExams(); const interval = setInterval(fetchExams, 60000); return () => clearInterval(interval); }, [user]);
+  
+  // Load exams only if not currently in an exam
+  useEffect(() => { 
+      if (!activeExam) {
+        fetchExams(); 
+        const interval = setInterval(fetchExams, 60000); 
+        return () => clearInterval(interval);
+      }
+  }, [user, activeExam]);
 
   const handleInitiateExam = (exam: Exam) => { setSelectedExam(exam); setInputToken(''); setTokenError(''); };
 
@@ -86,9 +94,17 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     if (inputToken.toUpperCase() === selectedExam.token) {
         enterFullScreen();
         const examState = { ...selectedExam, _studentUser: user.username };
+        
+        // Simpan state ujian aktif
         localStorage.setItem('exambit_active_exam', JSON.stringify(examState));
-        if (!localStorage.getItem('exambit_exam_start_timestamp')) localStorage.setItem('exambit_exam_start_timestamp', Date.now().toString());
-        setActiveExam(examState); setSelectedExam(null); 
+        
+        // Simpan waktu mulai jika belum ada
+        if (!localStorage.getItem('exambit_exam_start_timestamp')) {
+            localStorage.setItem('exambit_exam_start_timestamp', Date.now().toString());
+        }
+        
+        setActiveExam(examState); 
+        setSelectedExam(null); 
     } else { setTokenError('Token tidak valid!'); }
   };
 
@@ -96,11 +112,14 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     if (activeExam) {
       if (document.fullscreenElement) document.exitFullscreen().catch(err => console.error(err));
       
-      // HAPUS LOGIC SIMPAN RESULT KE DATABASE
-      // Aplikasi hanya membersihkan state lokal
-      
+      // Bersihkan Session Storage Khusus Ujian ini
       localStorage.removeItem('exambit_active_exam'); 
       localStorage.removeItem('exambit_exam_start_timestamp'); 
+      
+      // Bersihkan Jawaban & Progress (Fitur Resume)
+      localStorage.removeItem(`exambit_answers_${activeExam.id}`);
+      localStorage.removeItem(`exambit_q_index_${activeExam.id}`);
+
       setIsExamFinished(true); 
       setActiveExam(null); 
     }
@@ -252,11 +271,32 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   });
 
   const [showConfirmFinish, setShowConfirmFinish] = useState(false);
-  const [currentQIndex, setCurrentQIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  
+  // FIX: Inisialisasi dari LocalStorage (Session Resume)
+  const [currentQIndex, setCurrentQIndex] = useState(() => {
+      const saved = localStorage.getItem(`exambit_q_index_${exam.id}`);
+      return saved ? parseInt(saved, 10) : 0;
+  });
+
+  // FIX: Inisialisasi dari LocalStorage (Session Resume)
+  const [answers, setAnswers] = useState<Record<string, string>>(() => {
+      const saved = localStorage.getItem(`exambit_answers_${exam.id}`);
+      return saved ? JSON.parse(saved) : {};
+  });
+
   const [questions, setQuestions] = useState<Question[]>([]);
   const [violations, setViolations] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
+
+  // FIX: Simpan Jawaban ke LocalStorage setiap ada perubahan
+  useEffect(() => {
+      localStorage.setItem(`exambit_answers_${exam.id}`, JSON.stringify(answers));
+  }, [answers, exam.id]);
+
+  // FIX: Simpan Posisi Soal ke LocalStorage setiap pindah soal
+  useEffect(() => {
+      localStorage.setItem(`exambit_q_index_${exam.id}`, currentQIndex.toString());
+  }, [currentQIndex, exam.id]);
 
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => { e.preventDefault(); return false; };

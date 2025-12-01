@@ -1,4 +1,5 @@
-import React, { Component, useState, useEffect, ReactNode } from 'react';
+
+import React, { useState, useEffect, ReactNode } from 'react';
 import { Login } from './pages/Login';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { StudentExam } from './pages/StudentExam';
@@ -14,14 +15,11 @@ interface ErrorBoundaryState {
 }
 
 // Error Boundary must be a Class Component
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      errorMsg: ''
-    };
-  }
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    errorMsg: ''
+  };
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true, errorMsg: error.toString() };
@@ -52,18 +50,16 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 const AppContent: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  
-  useEffect(() => {
+  // Use lazy initialization for user state to avoid flicker on refresh
+  const [user, setUser] = useState<User | null>(() => {
     try {
         const savedUser = localStorage.getItem('exambit_user');
-        if (savedUser) {
-          setUser(JSON.parse(savedUser));
-        }
+        return savedUser ? JSON.parse(savedUser) : null;
     } catch (e) {
         console.error("Storage parsing error", e);
+        return null;
     }
-  }, []);
+  });
 
   const handleLogin = (userData: User) => {
     setUser(userData);
