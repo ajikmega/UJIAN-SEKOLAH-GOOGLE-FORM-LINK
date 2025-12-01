@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, AlertOctagon, Menu } from 'lucide-react';
+import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, Menu } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -83,16 +83,9 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleInitiateExam = (exam: Exam) => { setSelectedExam(exam); setInputToken(''); setTokenError(''); };
 
-  const enterFullScreen = () => {
-    const elem = document.documentElement as any;
-    if (elem.requestFullscreen) elem.requestFullscreen().catch((err: any) => console.error(err));
-    else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-  };
-
   const handleSubmitToken = () => {
     if (!selectedExam) return;
     if (inputToken.toUpperCase() === selectedExam.token) {
-        enterFullScreen();
         const examState = { ...selectedExam, _studentUser: user.username };
         
         // Simpan state ujian aktif
@@ -108,10 +101,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     } else { setTokenError('Token tidak valid!'); }
   };
 
-  const handleFinish = async (score?: number, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED', violationCount = 0) => {
+  const handleFinish = async (score?: number, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED') => {
     if (activeExam) {
-      if (document.fullscreenElement) document.exitFullscreen().catch(err => console.error(err));
-      
       // Bersihkan Session Storage Khusus Ujian ini
       localStorage.removeItem('exambit_active_exam'); 
       localStorage.removeItem('exambit_exam_start_timestamp'); 
@@ -154,7 +145,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   if (activeExam) return <ExamRoom exam={activeExam} user={user} onFinish={handleFinish} />;
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans flex flex-col noselect">
+    <div className="min-h-screen bg-gray-50 font-sans flex flex-col">
       <header className="bg-gradient-to-r from-blue-800 to-blue-600 text-white shadow-lg sticky top-0 z-20">
         <div className="container mx-auto px-4 lg:px-6 h-16 flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -258,7 +249,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   );
 };
 
-const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, status?: 'COMPLETED' | 'CHEATING_SUSPECTED', violations?: number) => void }> = ({ exam, user, onFinish }) => {
+const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, status?: 'COMPLETED' | 'CHEATING_SUSPECTED') => void }> = ({ exam, user, onFinish }) => {
   const [timeLeft, setTimeLeft] = useState(() => {
       const startStr = localStorage.getItem('exambit_exam_start_timestamp');
       if (startStr) {
@@ -285,8 +276,6 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   });
 
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [violations, setViolations] = useState(0);
-  const [showWarning, setShowWarning] = useState(false);
 
   // FIX: Simpan Jawaban ke LocalStorage setiap ada perubahan
   useEffect(() => {
@@ -297,28 +286,6 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   useEffect(() => {
       localStorage.setItem(`exambit_q_index_${exam.id}`, currentQIndex.toString());
   }, [currentQIndex, exam.id]);
-
-  useEffect(() => {
-    const handleContextMenu = (e: MouseEvent) => { e.preventDefault(); return false; };
-    const handleVisibilityChange = () => { if (document.hidden) recordViolation(); };
-    const handleBlur = () => { recordViolation(); };
-    const handleFullScreenChange = () => { if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) recordViolation(); };
-    const recordViolation = () => { setViolations(prev => { const newVal = prev + 1; if (newVal === 5) setShowWarning(true); return newVal; }); };
-
-    document.addEventListener('contextmenu', handleContextMenu);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    document.addEventListener('fullscreenchange', handleFullScreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
-    window.addEventListener('blur', handleBlur);
-
-    return () => {
-        document.removeEventListener('contextmenu', handleContextMenu);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        document.removeEventListener('fullscreenchange', handleFullScreenChange);
-        document.removeEventListener('webkitfullscreenchange', handleFullScreenChange);
-        window.removeEventListener('blur', handleBlur);
-    };
-  }, []);
 
   useEffect(() => {
     const loadQuestions = async () => {
@@ -356,33 +323,13 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
           questions.forEach(q => { if (q.type === 'MULTIPLE_CHOICE' && answers[q.id] === q.correctAnswer) correctCount++; });
           score = Math.round((correctCount / questions.length) * 100);
       }
-      onFinish(score, status, violations);
-  };
-
-  const reEnterFullScreen = () => {
-      const elem = document.documentElement as any;
-      if (elem.requestFullscreen) elem.requestFullscreen().catch((err: any) => console.error(err));
-      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+      onFinish(score, status);
   };
 
   const currentQuestion = questions[currentQIndex];
 
   return (
-    <div className="h-dvh flex flex-col bg-gray-100 overflow-hidden noselect font-sans">
-      {showWarning && (
-          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-6 backdrop-blur-md">
-              <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl border-4 border-red-500 animate-pulse">
-                  <div className="mx-auto w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-6"><AlertOctagon size={48} /></div>
-                  <h3 className="text-2xl font-black text-gray-900 mb-2 uppercase">Pelanggaran Terdeteksi!</h3>
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                      <p className="text-red-800 font-bold text-xl">Peringatan ke-{violations}</p>
-                  </div>
-                  <p className="text-gray-600 mb-8 font-medium">Jangan keluar dari aplikasi atau membuka tab lain. Aktivitas Anda dipantau.</p>
-                  <Button onClick={() => { setShowWarning(false); reEnterFullScreen(); }} className="w-full bg-red-600 hover:bg-red-700 py-4 text-lg font-bold shadow-lg shadow-red-500/30">KEMBALI KE UJIAN</Button>
-              </div>
-          </div>
-      )}
-
+    <div className="h-dvh flex flex-col bg-gray-100 overflow-hidden font-sans">
       {/* Header Compact for Mobile */}
       <div className="bg-[#0f4c81] text-white shadow-md z-30 flex-shrink-0 relative">
         <div className="container mx-auto px-4 h-14 md:h-16 flex justify-between items-center">
