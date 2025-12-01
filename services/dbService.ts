@@ -210,8 +210,9 @@ const apiDb = {
     if (error) handleError(error, 'Hapus Ujian');
 
     // FITUR REQUEST: Hapus data sesi siswa ketika ujian dihapus
-    // Cleanup sessions, ignore error if fails
-    await supabase.from('sessions').delete().neq('student_name', '___').catch(() => {});
+    // Tidak menggunakan .catch() karena Supabase v2 tidak melempar error query standar
+    const { error: sessionError } = await supabase.from('sessions').delete().neq('student_name', '___');
+    if (sessionError) console.warn("Session cleanup warning:", sessionError.message);
   },
 
   updateExamStatus: async (id: string, isActive: boolean) => {
@@ -224,7 +225,8 @@ const apiDb = {
 
     // FITUR: Jika ujian dimatikan (STOP), bersihkan sesi siswa (Siswa Online = 0)
     if (!isActive) {
-      await supabase.from('sessions').delete().neq('student_name', '___').catch(() => {});
+        const { error: sessionError } = await supabase.from('sessions').delete().neq('student_name', '___');
+        if (sessionError) console.warn("Session cleanup warning:", sessionError.message);
     }
   },
 
