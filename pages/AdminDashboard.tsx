@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, RefreshCw } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, RefreshCw, ChevronDown } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
@@ -216,7 +216,7 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
       
       setNewExam({ 
           title: '', 
-          token: '', 
+          token: '', // Initialize empty token
           durationMinutes: 60, 
           mode: 'GOOGLE_FORM', 
           googleFormUrl: '', 
@@ -360,7 +360,7 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
                 <Input 
                     value={newExam.token} 
                     onChange={e => setNewExam({...newExam, token: e.target.value.toUpperCase()})}
-                    placeholder="TOKEN123"
+                    placeholder="TOKEN"
                     className="font-mono uppercase tracking-widest" 
                 />
             </div>
@@ -411,26 +411,34 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
 // --- Question Bank ---
 const QuestionBank: React.FC = () => {
     const [questions, setQuestions] = useState<Question[]>([]);
+    const [classes, setClasses] = useState<ClassGroup[]>([]);
     const [isQModalOpen, setIsQModalOpen] = useState(false);
     const [newQ, setNewQ] = useState<Partial<Question>>({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' });
     const [loading, setLoading] = useState(false);
 
-    const loadQuestions = async () => {
+    const loadData = async () => {
         setLoading(true);
-        try { const data = await db.getQuestions(); setQuestions(data.filter(q => q.type === 'EXTERNAL_FORM')); } catch (e) { console.error(e); } finally { setLoading(false); }
+        try { 
+            const [qData, cData] = await Promise.all([
+                db.getQuestions(),
+                db.getClasses()
+            ]);
+            setQuestions(qData.filter(q => q.type === 'EXTERNAL_FORM')); 
+            setClasses(cData);
+        } catch (e) { console.error(e); } finally { setLoading(false); }
     };
-    useEffect(() => { loadQuestions(); }, []);
+    useEffect(() => { loadData(); }, []);
 
     const handleAddQuestion = async () => {
         if(newQ.text && newQ.topic && newQ.googleFormUrl) {
             setLoading(true);
-            try { await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM' } as Question); setIsQModalOpen(false); setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' }); await loadQuestions(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
+            try { await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM' } as Question); setIsQModalOpen(false); setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' }); await loadData(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
         }
     };
 
     const handleDelete = async (id: string) => {
         setLoading(true);
-        try { await db.deleteQuestion(id); await loadQuestions(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
+        try { await db.deleteQuestion(id); await loadData(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
     }
 
     return (
@@ -462,7 +470,26 @@ const QuestionBank: React.FC = () => {
                 <h3 className="font-bold text-lg mb-6 text-gray-800 border-b pb-3">Tambah Link Google Form</h3>
                 <div className="space-y-4">
                     <div className="space-y-1"><label className="text-sm font-medium text-gray-700">Mata Pelajaran / Topik</label><Input placeholder="Contoh: Bahasa Inggris" value={newQ.topic} onChange={e => setNewQ({...newQ, topic: e.target.value})} /></div>
-                    <div className="space-y-1"><label className="text-sm font-medium text-gray-700">Judul Soal</label><Input placeholder="Contoh: Daily Test Chapter 1" value={newQ.text} onChange={e => setNewQ({...newQ, text: e.target.value})} /></div>
+                    
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">Kelas</label>
+                        <div className="relative">
+                            <select 
+                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white appearance-none transition-colors"
+                                value={newQ.text} 
+                                onChange={e => setNewQ({...newQ, text: e.target.value})}
+                            >
+                                <option value="">-- Pilih Kelas --</option>
+                                {classes.map(c => (
+                                    <option key={c.id} value={c.name}>{c.name}</option>
+                                ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+                                <ChevronDown size={16} />
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="space-y-1"><label className="text-sm font-medium text-gray-700">URL Google Form</label><Input placeholder="https://docs.google.com/forms/..." value={newQ.googleFormUrl} onChange={e => setNewQ({...newQ, googleFormUrl: e.target.value})} /></div>
                     <div className="pt-6 flex justify-end gap-3">
                         <Button variant="outline" onClick={() => setIsQModalOpen(false)}>Batal</Button>

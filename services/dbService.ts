@@ -112,7 +112,7 @@ const apiDb = {
     const { data, error } = await supabase
       .from('questions')
       .select('id, text, type, topic, google_form_url')
-      .order('created_at', { ascending: false });
+      .order('text', { ascending: true });
 
     if (error) handleError(error, 'Bank Soal');
     
