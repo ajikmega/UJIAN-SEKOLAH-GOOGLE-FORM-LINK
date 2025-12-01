@@ -415,6 +415,7 @@ const QuestionBank: React.FC = () => {
     const [isQModalOpen, setIsQModalOpen] = useState(false);
     const [newQ, setNewQ] = useState<Partial<Question>>({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' });
     const [loading, setLoading] = useState(false);
+    const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
 
     const loadData = async () => {
         setLoading(true);
@@ -429,10 +430,35 @@ const QuestionBank: React.FC = () => {
     };
     useEffect(() => { loadData(); }, []);
 
+    const handleClassToggle = (className: string) => {
+        if (selectedClasses.includes(className)) {
+            setSelectedClasses(selectedClasses.filter(c => c !== className));
+        } else {
+            setSelectedClasses([...selectedClasses, className]);
+        }
+    };
+
+    const handleOpenModal = () => {
+        setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' });
+        setSelectedClasses([]);
+        setIsQModalOpen(true);
+    };
+
     const handleAddQuestion = async () => {
-        if(newQ.text && newQ.topic && newQ.googleFormUrl) {
+        // Gabungkan kelas yang dipilih menjadi string
+        const classString = selectedClasses.join(', ');
+
+        if(newQ.topic && newQ.googleFormUrl && classString) {
             setLoading(true);
-            try { await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM' } as Question); setIsQModalOpen(false); setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' }); await loadData(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
+            try { 
+                await db.addQuestion({ ...newQ, id: '', type: 'EXTERNAL_FORM', text: classString } as Question); 
+                setIsQModalOpen(false); 
+                setNewQ({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' }); 
+                setSelectedClasses([]);
+                await loadData(); 
+            } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
+        } else {
+            alert("Harap lengkapi semua form dan pilih minimal satu kelas.");
         }
     };
 
@@ -442,7 +468,7 @@ const QuestionBank: React.FC = () => {
     }
 
     return (
-        <Card title="Bank Soal (Google Form)" action={<Button onClick={() => setIsQModalOpen(true)} size="sm"><Plus size={16}/> Tambah Link</Button>}>
+        <Card title="Bank Soal (Google Form)" action={<Button onClick={handleOpenModal} size="sm"><Plus size={16}/> Tambah Link</Button>}>
             {loading ? <p className="text-center text-gray-400 py-8">Memuat data...</p> : (
                 <div className="space-y-3">
                     {questions.length === 0 && <p className="text-center text-gray-400 py-10 italic">Belum ada link form tersimpan.</p>}
@@ -472,22 +498,21 @@ const QuestionBank: React.FC = () => {
                     <div className="space-y-1"><label className="text-sm font-medium text-gray-700">Mata Pelajaran / Topik</label><Input placeholder="Contoh: Bahasa Inggris" value={newQ.topic} onChange={e => setNewQ({...newQ, topic: e.target.value})} /></div>
                     
                     <div className="space-y-1">
-                        <label className="text-sm font-medium text-gray-700">Kelas</label>
-                        <div className="relative">
-                            <select 
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white appearance-none transition-colors"
-                                value={newQ.text} 
-                                onChange={e => setNewQ({...newQ, text: e.target.value})}
-                            >
-                                <option value="">-- Pilih Kelas --</option>
-                                {classes.map(c => (
-                                    <option key={c.id} value={c.name}>{c.name}</option>
-                                ))}
-                            </select>
-                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
-                                <ChevronDown size={16} />
-                            </div>
+                        <label className="text-sm font-medium text-gray-700">Pilih Kelas</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 p-3 rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
+                            {classes.map(c => (
+                                <label key={c.id} className={`flex items-center gap-2 text-sm p-2 rounded cursor-pointer transition-colors ${selectedClasses.includes(c.name) ? 'bg-blue-100 text-blue-800 font-medium' : 'hover:bg-gray-200'}`}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedClasses.includes(c.name)} 
+                                        onChange={() => handleClassToggle(c.name)} 
+                                        className="rounded text-blue-600 focus:ring-blue-500" 
+                                    />
+                                    {c.name}
+                                </label>
+                            ))}
                         </div>
+                        <p className="text-xs text-gray-400 mt-1">Pilih kelas yang dapat mengakses soal ini.</p>
                     </div>
 
                     <div className="space-y-1"><label className="text-sm font-medium text-gray-700">URL Google Form</label><Input placeholder="https://docs.google.com/forms/..." value={newQ.googleFormUrl} onChange={e => setNewQ({...newQ, googleFormUrl: e.target.value})} /></div>
