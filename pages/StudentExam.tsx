@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, AlertOctagon } from 'lucide-react';
+import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, AlertOctagon, Menu } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -383,63 +383,70 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
           </div>
       )}
 
+      {/* Header Compact for Mobile */}
       <div className="bg-[#0f4c81] text-white shadow-md z-30 flex-shrink-0 relative">
-        <div className="container mx-auto px-4 h-16 flex justify-between items-center">
+        <div className="container mx-auto px-4 h-14 md:h-16 flex justify-between items-center">
             <div className="flex flex-col min-w-0 mr-4">
-              <h1 className="font-bold text-lg md:text-xl leading-tight truncate tracking-wide text-white">{exam.title}</h1>
-              <div className="flex items-center gap-2 text-xs text-blue-200 mt-0.5">
-                <span className="font-medium text-white">{user.fullName}</span>
-                <span className="w-1 h-1 bg-blue-400 rounded-full"></span>
+              <h1 className="font-bold text-base md:text-xl leading-tight truncate tracking-wide text-white">{exam.title}</h1>
+              <div className="flex items-center gap-2 text-[10px] md:text-xs text-blue-200 mt-0.5">
+                <span className="font-medium text-white truncate max-w-[100px] md:max-w-none">{user.fullName}</span>
+                <span className="w-1 h-1 bg-blue-400 rounded-full flex-shrink-0"></span>
                 <span>{user.className}</span>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-               <div className="hidden md:flex flex-col items-end bg-blue-800/50 px-3 py-1 rounded border border-blue-500/30">
-                  <span className="text-[10px] text-blue-300 font-bold uppercase tracking-wider">Sisa Waktu</span>
-                  <div className={`font-mono text-xl font-bold leading-none ${timeLeft < 300 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+            <div className="flex items-center gap-2 md:gap-4">
+               <div className="flex flex-col items-end bg-blue-800/50 px-2 md:px-3 py-1 rounded border border-blue-500/30">
+                  <span className="hidden md:block text-[10px] text-blue-300 font-bold uppercase tracking-wider">Sisa Waktu</span>
+                  <div className={`font-mono text-lg md:text-xl font-bold leading-none ${timeLeft < 300 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
                      {formatTime(timeLeft)}
                   </div>
                </div>
-               <div className="md:hidden font-mono font-bold bg-blue-800 px-2 py-1 rounded text-sm">{formatTime(timeLeft)}</div>
                
                <Button 
                 onClick={() => setShowConfirmFinish(true)} 
-                className="h-10 text-xs font-bold shadow-md bg-white text-blue-800 hover:bg-blue-50 border-none flex items-center gap-2"
+                className="h-9 md:h-10 text-xs font-bold shadow-md bg-white text-blue-800 hover:bg-blue-50 border-none flex items-center gap-2 px-3"
                >
-                 <LayoutGrid size={16} /> <span className="hidden md:inline">Kembali ke Dashboard</span><span className="md:hidden">Dashboard</span>
+                 <LogOut size={14} className="md:hidden" />
+                 <LayoutGrid size={16} className="hidden md:block" /> 
+                 <span className="hidden md:inline">Dashboard</span>
                </Button>
             </div>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden relative">
           {exam.mode === 'GOOGLE_FORM' ? (
                <div className="flex-1 bg-white w-full h-full relative">
                  {exam.googleFormUrl ? <iframe src={exam.googleFormUrl} className="w-full h-full border-none block" title="Google Form" allow="fullscreen"></iframe> : <div className="p-10 text-center">URL Form Tidak Valid</div>}
                </div>
           ) : (
-              <div className="flex-1 flex flex-col md:flex-row h-full">
-                  <div className="flex-1 bg-white p-6 md:p-8 overflow-y-auto">
+              <>
+                  {/* Left Side: Question Area */}
+                  <div className="flex-1 bg-white overflow-y-auto flex flex-col relative z-0">
                       {questions.length > 0 && currentQuestion ? (
-                          <div className="max-w-4xl mx-auto pb-20">
-                              <div className="flex justify-between mb-6 border-b pb-4">
-                                <span className="text-gray-400 font-bold text-lg">Soal No. {currentQIndex + 1}</span>
-                                <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">{currentQuestion.type === 'MULTIPLE_CHOICE' ? 'Pilihan Ganda' : 'Esai'}</span>
+                          <div className="max-w-4xl mx-auto p-4 md:p-8 w-full pb-20 md:pb-12">
+                              <div className="flex justify-between items-center mb-4 md:mb-6 border-b pb-3 md:pb-4 sticky top-0 bg-white z-10 pt-2">
+                                <span className="text-gray-500 font-bold text-sm md:text-lg">Soal No. <span className="text-blue-600 text-xl md:text-2xl ml-1">{currentQIndex + 1}</span></span>
+                                <span className="bg-blue-50 text-blue-700 text-[10px] md:text-xs font-bold px-2 py-1 md:px-3 rounded-full uppercase tracking-wide border border-blue-100">{currentQuestion.type === 'MULTIPLE_CHOICE' ? 'Pilihan Ganda' : 'Esai'}</span>
                               </div>
-                              <div className="text-xl text-gray-800 mb-8 leading-relaxed font-medium">{currentQuestion.text}</div>
-                              <div className="space-y-4">
+                              
+                              <div className="text-base md:text-xl text-gray-800 mb-6 md:mb-8 leading-relaxed font-medium select-text">
+                                  {currentQuestion.text}
+                              </div>
+                              
+                              <div className="space-y-3 md:space-y-4">
                                 {currentQuestion.type === 'MULTIPLE_CHOICE' && currentQuestion.options?.map((opt, idx) => (
-                                    <label key={idx} className={`flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-50 border-blue-500 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}>
-                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 flex-shrink-0 transition-colors ${answers[currentQuestion.id] === idx.toString() ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 group-hover:border-gray-400'}`}>
-                                            {answers[currentQuestion.id] === idx.toString() && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                                    <label key={idx} className={`flex items-start md:items-center p-3 md:p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group active:scale-[0.99] ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-50 border-blue-500 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}>
+                                        <div className={`mt-0.5 md:mt-0 w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center mr-3 md:mr-4 flex-shrink-0 transition-colors ${answers[currentQuestion.id] === idx.toString() ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 group-hover:border-gray-400'}`}>
+                                            {answers[currentQuestion.id] === idx.toString() && <div className="w-2 h-2 md:w-2.5 md:h-2.5 bg-white rounded-full" />}
                                         </div>
                                         <input type="radio" name={`q-${currentQuestion.id}`} className="hidden" checked={answers[currentQuestion.id] === idx.toString()} onChange={() => setAnswers({...answers, [currentQuestion.id]: idx.toString()})} />
-                                        <span className={`text-lg ${answers[currentQuestion.id] === idx.toString() ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>{opt}</span>
+                                        <span className={`text-sm md:text-lg leading-snug ${answers[currentQuestion.id] === idx.toString() ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>{opt}</span>
                                     </label>
                                 ))}
                                 {currentQuestion.type === 'ESSAY' && (
                                     <textarea 
-                                        className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[200px] text-lg leading-relaxed shadow-inner"
+                                        className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[150px] md:min-h-[200px] text-base md:text-lg leading-relaxed shadow-inner"
                                         placeholder="Ketik jawaban Anda di sini..."
                                         value={answers[currentQuestion.id] || ''}
                                         onChange={e => setAnswers({...answers, [currentQuestion.id]: e.target.value})}
@@ -450,26 +457,36 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                       ) : ( <div className="text-center py-20 text-gray-400">{questions.length === 0 ? "Memuat soal..." : "Soal tidak ditemukan."}</div> )}
                   </div>
                   
-                  <div className="w-full md:w-80 bg-gray-50 border-l border-gray-200 p-6 flex flex-col shadow-inner">
-                      <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide"><LayoutGrid size={16} /> Navigasi Soal</h3>
-                      <div className="grid grid-cols-5 gap-2 overflow-y-auto max-h-[200px] md:max-h-full content-start pr-1 custom-scrollbar">
-                          {questions.map((_, idx) => (
-                              <button key={idx} onClick={() => setCurrentQIndex(idx)}
-                                className={`aspect-square rounded-lg flex items-center justify-center text-sm font-bold transition-all shadow-sm ${
-                                    currentQIndex === idx ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 transform scale-105' : 
-                                    answers[questions[idx].id] ? 'bg-emerald-500 text-white border-transparent' : 'bg-white border border-gray-200 text-gray-600 hover:bg-white hover:border-blue-300'
-                                }`}
-                              >
-                                  {idx + 1}
-                              </button>
-                          ))}
+                  {/* Right/Bottom Side: Navigation & Actions */}
+                  {/* On Mobile: It sits at bottom with max height. On Desktop: Full height sidebar on right */}
+                  <div className="w-full md:w-72 lg:w-80 bg-gray-50 border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:shadow-inner flex-shrink-0 z-20">
+                      <div className="p-3 md:p-6 bg-gray-100 md:bg-transparent border-b border-gray-200 flex justify-between items-center md:block">
+                         <h3 className="font-bold text-gray-700 md:mb-4 flex items-center gap-2 text-xs md:text-sm uppercase tracking-wide"><LayoutGrid size={16} /> Navigasi Soal</h3>
+                         <span className="md:hidden text-xs text-gray-500 font-mono">{answers[currentQuestion?.id || ''] ? 'Terjawab' : 'Belum dijawab'}</span>
                       </div>
-                      <div className="mt-auto pt-6 flex gap-3">
-                              <Button variant="outline" className="flex-1" onClick={() => setCurrentQIndex(Math.max(0, currentQIndex - 1))} disabled={currentQIndex === 0}><ChevronLeft size={16}/></Button>
-                              <Button variant="outline" className="flex-1" onClick={() => setCurrentQIndex(Math.min(questions.length - 1, currentQIndex + 1))} disabled={currentQIndex === questions.length - 1}><ChevronRight size={16}/></Button>
+                      
+                      {/* Grid Container: Scrollable on mobile if too many questions */}
+                      <div className="flex-1 overflow-y-auto p-3 md:p-4 max-h-[35vh] md:max-h-full custom-scrollbar bg-gray-50 md:bg-transparent">
+                          <div className="grid grid-cols-5 md:grid-cols-5 gap-2 content-start">
+                              {questions.map((_, idx) => (
+                                  <button key={idx} onClick={() => setCurrentQIndex(idx)}
+                                    className={`aspect-square rounded-lg flex items-center justify-center text-xs md:text-sm font-bold transition-all shadow-sm ${
+                                        currentQIndex === idx ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 transform scale-105 z-10' : 
+                                        answers[questions[idx].id] ? 'bg-emerald-500 text-white border-transparent' : 'bg-white border border-gray-200 text-gray-600 hover:bg-white hover:border-blue-300'
+                                    }`}
+                                  >
+                                      {idx + 1}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+                      
+                      <div className="p-3 md:p-6 bg-white border-t border-gray-200 flex gap-2 md:gap-3">
+                              <Button variant="outline" className="flex-1 h-10 md:h-auto" onClick={() => setCurrentQIndex(Math.max(0, currentQIndex - 1))} disabled={currentQIndex === 0}><ChevronLeft size={16}/></Button>
+                              <Button variant="outline" className="flex-1 h-10 md:h-auto" onClick={() => setCurrentQIndex(Math.min(questions.length - 1, currentQIndex + 1))} disabled={currentQIndex === questions.length - 1}><ChevronRight size={16}/></Button>
                       </div>
                   </div>
-              </div>
+              </>
           )}
       </div>
 
