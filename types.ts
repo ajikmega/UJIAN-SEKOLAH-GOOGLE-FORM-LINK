@@ -33,7 +33,7 @@ export interface ExamResult {
   studentName: string;
   className: string;
   completedAt: string;
-  status: 'COMPLETED' | 'CHEATING_SUSPECTED';
+  status: 'COMPLETED' | 'CHEATING_SUSPECTED' | 'IN_PROGRESS';
   score?: number; // 0-100
   answers?: Record<string, string>; // QuestionID -> Answer
   violationCount?: number; // Number of times detecting tab switch/blur

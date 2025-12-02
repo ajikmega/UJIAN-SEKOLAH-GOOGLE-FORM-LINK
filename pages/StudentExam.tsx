@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, Menu } from 'lucide-react';
+import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, Menu, CloudUpload } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -39,9 +39,12 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const [tokenError, setTokenError] = useState('');
 
   useEffect(() => {
-    const sendSignal = async () => { try { await db.sendHeartbeat(user); } catch(e) { } };
-    sendSignal();
-    const interval = setInterval(sendSignal, 30000);
+    // Initial Heartbeat
+    db.sendHeartbeat(user);
+    
+    const interval = setInterval(() => {
+         db.sendHeartbeat(user);
+    }, 30000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -67,7 +70,10 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
             return true;
         });
         setAvailableExams(filtered);
-    } catch(e) { console.error("Failed to fetch exams", e); }
+    } catch(e: any) { 
+        // Use warn instead of error to reduce console noise on network fail
+        console.warn("Info: Gagal memuat daftar ujian (mungkin koneksi instabil)."); 
+    }
   };
 
   const handleRefresh = async () => { setIsRefreshing(true); await fetchExams(); setIsRefreshing(false); };
@@ -101,18 +107,36 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     } else { setTokenError('Token tidak valid!'); }
   };
 
-  const handleFinish = async (score?: number, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED') => {
+  const handleFinish = async (score: number = 0, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED') => {
     if (activeExam) {
-      // Bersihkan Session Storage Khusus Ujian ini
-      localStorage.removeItem('exambit_active_exam'); 
-      localStorage.removeItem('exambit_exam_start_timestamp'); 
-      
-      // Bersihkan Jawaban & Progress (Fitur Resume)
-      localStorage.removeItem(`exambit_answers_${activeExam.id}`);
-      localStorage.removeItem(`exambit_q_index_${activeExam.id}`);
+        try {
+            // FIX: Submit hasil ke database
+            const resultPayload = {
+                examId: activeExam.id,
+                studentName: user.fullName || user.username,
+                className: user.className || '',
+                score: score,
+                status: status,
+                completedAt: new Date().toISOString(),
+                violationCount: 0,
+                answers: activeExam.mode === 'GOOGLE_FORM' 
+                    ? { 'info': 'Dikerjakan via Google Form' } // Placeholder for G-Form
+                    : JSON.parse(localStorage.getItem(`exambit_answers_${activeExam.id}`) || '{}')
+            };
 
-      setIsExamFinished(true); 
-      setActiveExam(null); 
+            await db.submitExam(resultPayload);
+
+            // Bersihkan storage setelah sukses submit
+            localStorage.removeItem('exambit_active_exam'); 
+            localStorage.removeItem('exambit_exam_start_timestamp'); 
+            localStorage.removeItem(`exambit_answers_${activeExam.id}`);
+            localStorage.removeItem(`exambit_q_index_${activeExam.id}`);
+
+            setIsExamFinished(true); 
+            setActiveExam(null);
+        } catch (e: any) {
+            alert("Gagal menyimpan hasil: " + e.message + "\nSilakan coba lagi atau hubungi pengawas.");
+        }
     }
   };
 
@@ -127,8 +151,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
           </div>
           <h2 className="text-3xl font-extrabold text-gray-800 mb-3 tracking-tight">Sesi Berakhir</h2>
           <p className="text-gray-500 mb-10 leading-relaxed">
-            Anda telah keluar dari ruang ujian.<br/>
-            Pastikan Anda sudah menekan <b>Submit</b> pada Google Form.
+            Jawaban Anda telah tersimpan.<br/>
+            Terima kasih telah mengikuti ujian ini.
           </p>
           <Button 
             onClick={handleReturnToDashboard} 
@@ -262,30 +286,63 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   });
 
   const [showConfirmFinish, setShowConfirmFinish] = useState(false);
-  
-  // FIX: Inisialisasi dari LocalStorage (Session Resume)
   const [currentQIndex, setCurrentQIndex] = useState(() => {
       const saved = localStorage.getItem(`exambit_q_index_${exam.id}`);
       return saved ? parseInt(saved, 10) : 0;
   });
 
-  // FIX: Inisialisasi dari LocalStorage (Session Resume)
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
       const saved = localStorage.getItem(`exambit_answers_${exam.id}`);
       return saved ? JSON.parse(saved) : {};
   });
 
   const [questions, setQuestions] = useState<Question[]>([]);
+  // State indikator save
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
   // FIX: Simpan Jawaban ke LocalStorage setiap ada perubahan
   useEffect(() => {
       localStorage.setItem(`exambit_answers_${exam.id}`, JSON.stringify(answers));
+      setSaveStatus('saved');
   }, [answers, exam.id]);
 
   // FIX: Simpan Posisi Soal ke LocalStorage setiap pindah soal
   useEffect(() => {
       localStorage.setItem(`exambit_q_index_${exam.id}`, currentQIndex.toString());
   }, [currentQIndex, exam.id]);
+
+  // FIX: Cloud Auto Save interval (Setiap 30 detik)
+  useEffect(() => {
+      if (exam.mode === 'NATIVE') {
+        const interval = setInterval(async () => {
+            if (Object.keys(answers).length > 0) {
+                setSaveStatus('saving');
+                try {
+                    // Kita gunakan submitExam tapi dengan status IN_PROGRESS jika didukung backend
+                    // atau simpan ke tabel session/drafts. 
+                    // Karena struktur tabel results unique pair (exam_id, student_name), 
+                    // kita bisa upsert status 'IN_PROGRESS'
+                    
+                    await db.submitExam({
+                        examId: exam.id,
+                        studentName: user.fullName || user.username,
+                        className: user.className || '',
+                        score: 0,
+                        status: 'IN_PROGRESS',
+                        completedAt: new Date().toISOString(),
+                        violationCount: 0,
+                        answers: answers
+                    });
+                    setSaveStatus('saved');
+                } catch (e) {
+                    console.warn("Auto save failed", e);
+                    setSaveStatus('error');
+                }
+            }
+        }, 30000);
+        return () => clearInterval(interval);
+      }
+  }, [exam, user, answers]);
 
   useEffect(() => {
     const loadQuestions = async () => {
@@ -307,7 +364,8 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
 
   useEffect(() => { if (timeLeft === 0) calculateAndFinish('COMPLETED'); }, [timeLeft]);
   
-  useEffect(() => { const sendSignal = async () => { try { await db.sendHeartbeat(user); } catch(e) {} }; const interval = setInterval(sendSignal, 30000); return () => clearInterval(interval); }, [user]);
+  // Heartbeat is handled in parent component now or we can keep it here for redundancy
+  // useEffect(() => { const sendSignal = async () => { try { await db.sendHeartbeat(user); } catch(e) {} }; const interval = setInterval(sendSignal, 30000); return () => clearInterval(interval); }, [user]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -339,6 +397,11 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                 <span className="font-medium text-white truncate max-w-[100px] md:max-w-none">{user.fullName}</span>
                 <span className="w-1 h-1 bg-blue-400 rounded-full flex-shrink-0"></span>
                 <span>{user.className}</span>
+                {exam.mode === 'NATIVE' && (
+                    <span className={`ml-2 flex items-center gap-1 ${saveStatus === 'error' ? 'text-red-300' : 'text-blue-300'}`}>
+                        <CloudUpload size={10} /> {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Retry'}
+                    </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-4">
@@ -355,7 +418,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                >
                  <LogOut size={14} className="md:hidden" />
                  <LayoutGrid size={16} className="hidden md:block" /> 
-                 <span className="hidden md:inline">Dashboard</span>
+                 <span className="hidden md:inline">Selesai</span>
                </Button>
             </div>
         </div>
@@ -440,13 +503,15 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
       <Modal isOpen={showConfirmFinish} onClose={() => setShowConfirmFinish(false)}>
           <div className="text-center py-4">
               <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6"><LayoutGrid size={40} /></div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-2">Kembali ke Dashboard?</h3>
+              <h3 className="text-2xl font-bold text-gray-800 mb-2">Selesaikan Ujian?</h3>
               <p className="text-gray-500 mb-8 max-w-xs mx-auto">
-                 Pastikan Anda telah mengirim jawaban di Google Form (<b>Submit</b>) sebelum keluar dari halaman ini.
+                 {exam.mode === 'GOOGLE_FORM' 
+                    ? "Pastikan Anda telah menekan tombol SUBMIT di dalam Google Form sebelum mengakhiri sesi ini." 
+                    : "Periksa kembali jawaban Anda. Setelah selesai, Anda tidak dapat mengubah jawaban lagi."}
               </p>
               <div className="flex gap-4">
                   <Button variant="outline" className="flex-1 py-3" onClick={() => setShowConfirmFinish(false)}>Batal</Button>
-                  <Button className="flex-1 py-3 shadow-lg" onClick={() => calculateAndFinish('COMPLETED')}>Ya, Kembali</Button>
+                  <Button className="flex-1 py-3 shadow-lg" onClick={() => calculateAndFinish('COMPLETED')}>Ya, Selesai</Button>
               </div>
           </div>
       </Modal>

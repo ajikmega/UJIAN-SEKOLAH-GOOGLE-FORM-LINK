@@ -7,12 +7,6 @@ import { supabase } from './supabaseClient';
 
 const handleError = (error: any, context: string) => {
     // Logging yang lebih detail
-    if (error instanceof Error) {
-        console.error(`Supabase Error [${context}]:`, error.message);
-    } else {
-        console.error(`Supabase Error [${context}]:`, JSON.stringify(error, null, 2));
-    }
-    
     let msg = error.message || '';
 
     // Handle Supabase specific error objects that might lack 'message'
@@ -22,9 +16,17 @@ const handleError = (error: any, context: string) => {
     
     if (!msg && typeof error === 'string') msg = error;
     
-    // Deteksi error network / fetch
-    if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("fetch failed")) {
+    // Deteksi error network / fetch (Termasuk TypeError: Failed to fetch)
+    if (msg.includes("Failed to fetch") || msg.includes("NetworkError") || msg.includes("fetch failed") || msg.includes("Load failed")) {
+        // Jangan log sebagai error di console jika hanya masalah koneksi sementara
+        console.warn(`[Network] Gagal menghubungi server (${context}): ${msg}`);
         throw new Error("Koneksi internet terganggu. Gagal menghubungi server database.");
+    }
+
+    if (error instanceof Error) {
+        console.error(`Supabase Error [${context}]:`, error.message);
+    } else {
+        console.error(`Supabase Error [${context}]:`, JSON.stringify(error, null, 2));
     }
 
     // Deteksi error tabel hilang (PostgREST code 42P01)
@@ -102,7 +104,6 @@ const apiDb = {
     
     if (error) handleError(error, 'Hapus Kelas');
     if (count === 0) {
-        // Silent fail warning, but don't crash app flow if already deleted
         console.warn("Item already deleted or permission denied");
     }
   },
@@ -116,7 +117,6 @@ const apiDb = {
 
     if (error) handleError(error, 'Bank Soal');
     
-    // Mapping snake_case (DB) ke camelCase (App)
     return (data || []).map((q: any) => ({
       ...q,
       googleFormUrl: q.google_form_url
@@ -144,7 +144,7 @@ const apiDb = {
     if (error) handleError(error, 'Hapus Soal');
   },
 
-  // PACKAGES (Placeholder untuk kompatibilitas type)
+  // PACKAGES
   getPackages: async (): Promise<ExamPackage[]> => { return []; },
   addPackage: async (pkg: ExamPackage) => { },
 
@@ -166,7 +166,7 @@ const apiDb = {
       durationMinutes: e.duration_minutes,
       startTime: e.start_time,
       isActive: e.is_active,
-      assignedClasses: e.assigned_classes || [] // JSONB otomatis jadi array
+      assignedClasses: e.assigned_classes || [] 
     }));
   },
 
@@ -209,8 +209,6 @@ const apiDb = {
       
     if (error) handleError(error, 'Hapus Ujian');
 
-    // FITUR REQUEST: Hapus data sesi siswa ketika ujian dihapus
-    // Tidak menggunakan .catch() karena Supabase v2 tidak melempar error query standar
     const { error: sessionError } = await supabase.from('sessions').delete().neq('student_name', '___');
     if (sessionError) console.warn("Session cleanup warning:", sessionError.message);
   },
@@ -223,7 +221,6 @@ const apiDb = {
     
     if (error) handleError(error, 'Update Status Ujian');
 
-    // FITUR: Jika ujian dimatikan (STOP), bersihkan sesi siswa (Siswa Online = 0)
     if (!isActive) {
         const { error: sessionError } = await supabase.from('sessions').delete().neq('student_name', '___');
         if (sessionError) console.warn("Session cleanup warning:", sessionError.message);
@@ -247,8 +244,6 @@ const apiDb = {
   },
 
   submitExam: async (result: ExamResult) => {
-    // Upsert logic (insert or update if exists)
-    // Cek apakah sudah ada hasil untuk ujian ini dan siswa ini
     const { data: existing } = await supabase
         .from('results')
         .select('id')
@@ -264,7 +259,8 @@ const apiDb = {
         score: result.score,
         status: result.status,
         completed_at: result.completedAt,
-        violation_count: result.violationCount
+        violation_count: result.violationCount,
+        answers: result.answers // Include answers for review if needed (JSONB)
     };
 
     if (existing) {
@@ -365,15 +361,24 @@ const apiDb = {
   // HEARTBEAT
   sendHeartbeat: async (user: User) => {
     if (user.role === Role.STUDENT && user.className) {
-        const { error } = await supabase
-            .from('sessions')
-            .upsert({
-                student_name: user.fullName || user.username,
-                class_name: user.className,
-                last_seen: new Date().toISOString()
-            }, { onConflict: 'student_name, class_name' });
-        
-        if (error) console.error("Heartbeat error:", error.message);
+        try {
+            const { error } = await supabase
+                .from('sessions')
+                .upsert({
+                    student_name: user.fullName || user.username,
+                    class_name: user.className,
+                    last_seen: new Date().toISOString()
+                }, { onConflict: 'student_name, class_name' });
+            
+            // Suppress error log for heartbeat if it fails (likely network glitch)
+            if (error) {
+                if (!error.message?.includes("Failed to fetch")) {
+                    console.warn("Heartbeat warning:", error.message);
+                }
+            }
+        } catch (e) {
+            // Completely silent catch for heartbeat to avoid console spam on network loss
+        }
     }
   },
 
@@ -386,7 +391,6 @@ const apiDb = {
       }
   },
 
-  // Unused methods kept for interface compatibility
   getResultsByExamId: async (examId: string) => { return [] },
   exportDatabase: async () => {},
   importDatabase: async () => {}

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info, AlertTriangle } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
@@ -14,7 +14,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout })
         const data = await db.getExams();
         setExams(data);
       } catch (e) {
-          console.error("Failed to load exams", e);
+          console.warn("Failed to load exams", e);
       }
   };
 
@@ -95,7 +95,7 @@ const DashboardOverview: React.FC = () => {
                 const data = await db.getGlobalStats();
                 setStats(data);
             } catch (e) {
-                console.error("Stats load error", e);
+                console.warn("Stats load error (network issue likely)", e);
             } finally {
                 setLoading(false);
             }
@@ -178,6 +178,7 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   const [formQuestions, setFormQuestions] = useState<Question[]>([]);
   const [availableClasses, setAvailableClasses] = useState<ClassGroup[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newExam, setNewExam] = useState<Partial<Exam>>({ 
@@ -191,13 +192,15 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
 
   useEffect(() => {
       if(isModalOpen) {
+          setErrorMsg('');
           const loadData = async () => {
             try {
                 const [qData, cData] = await Promise.all([db.getQuestions(), db.getClasses()]);
                 setFormQuestions(qData.filter(q => q.type === 'EXTERNAL_FORM'));
                 setAvailableClasses(cData);
-            } catch(e) {
-                console.error("Failed to load dependency data", e);
+            } catch(e: any) {
+                console.warn("Failed to load dependency data", e);
+                setErrorMsg("Gagal memuat data pendukung. Periksa koneksi internet.");
             }
           }
           loadData();
@@ -249,6 +252,7 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   };
 
   const handleDelete = async (id: string) => {
+      if(!confirm("Anda yakin ingin menghapus ujian ini? Data hasil ujian terkait juga akan dihapus.")) return;
       setLoading(true);
       try { await db.deleteExam(id); await onUpdate(); } catch (e: any) { alert("Gagal menghapus ujian: " + e.message); } finally { setLoading(false); }
   };
@@ -368,6 +372,14 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <h3 className="text-xl font-bold mb-6 text-gray-800 border-b pb-4">{editingId ? 'Edit Ujian' : 'Buat Ujian Baru'}</h3>
+        
+        {errorMsg && (
+            <div className="mb-4 bg-red-50 p-3 rounded-lg border border-red-100 flex items-start gap-2 text-sm text-red-600">
+                <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+                <p>{errorMsg}</p>
+            </div>
+        )}
+
         <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
           
           <div className="space-y-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
@@ -480,7 +492,7 @@ const QuestionBank: React.FC = () => {
             ]);
             setQuestions(qData.filter(q => q.type === 'EXTERNAL_FORM')); 
             setClasses(cData);
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+        } catch (e) { console.warn("Load failed", e); } finally { setLoading(false); }
     };
     useEffect(() => { loadData(); }, []);
 
@@ -517,6 +529,7 @@ const QuestionBank: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
+        if(!confirm("Hapus link ini?")) return;
         setLoading(true);
         try { await db.deleteQuestion(id); await loadData(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
     }
@@ -585,7 +598,7 @@ const ClassManager: React.FC = () => {
     const [classes, setClasses] = useState<ClassGroup[]>([]);
     const [loading, setLoading] = useState(false);
     
-    const loadClasses = async () => { setLoading(true); try { const data = await db.getClasses(); setClasses(data); } catch(e) {} setLoading(false); };
+    const loadClasses = async () => { setLoading(true); try { const data = await db.getClasses(); setClasses(data); } catch(e) {console.warn(e);} setLoading(false); };
     useEffect(() => { loadClasses(); }, []);
 
     const handleAdd = async () => {
@@ -593,7 +606,7 @@ const ClassManager: React.FC = () => {
         if(input.value) { setLoading(true); try { await db.addClass(input.value); input.value = ''; await loadClasses(); } catch(e: any) { alert("Error: " + e.message); } finally { setLoading(false); } }
     };
 
-    const handleDelete = async (id: string) => { setLoading(true); try { await db.deleteClass(id); await loadClasses(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); } };
+    const handleDelete = async (id: string) => { if(confirm("Hapus kelas ini?")) { setLoading(true); try { await db.deleteClass(id); await loadClasses(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); } } };
 
     return (
         <Card title="Manajemen Kelas" className="max-w-2xl">
@@ -615,4 +628,3 @@ const ClassManager: React.FC = () => {
         </Card>
     )
 };
-    
