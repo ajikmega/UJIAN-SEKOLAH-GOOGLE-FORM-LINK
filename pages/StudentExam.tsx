@@ -414,11 +414,10 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                
                <Button 
                 onClick={() => setShowConfirmFinish(true)} 
-                className="h-9 md:h-10 text-xs font-bold shadow-md bg-white text-blue-800 hover:bg-blue-50 border-none flex items-center gap-2 px-3"
+                className="h-9 md:h-10 text-xs font-bold shadow-md bg-red-600 text-white hover:bg-red-700 border-none flex items-center gap-2 px-3"
                >
-                 <LogOut size={14} className="md:hidden" />
-                 <LayoutGrid size={16} className="hidden md:block" /> 
-                 <span className="hidden md:inline">Selesai</span>
+                 <LogOut size={16} /> 
+                 <span className="hidden md:inline">Log Out</span>
                </Button>
             </div>
         </div>
