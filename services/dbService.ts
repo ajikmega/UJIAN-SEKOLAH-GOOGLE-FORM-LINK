@@ -252,7 +252,7 @@ const apiDb = {
         .maybeSingle();
 
     let error;
-    const payload = {
+    const payload: any = {
         exam_id: result.examId,
         student_name: result.studentName,
         class_name: result.className,
@@ -269,6 +269,20 @@ const apiDb = {
     } else {
         const res = await supabase.from('results').insert([payload]);
         error = res.error;
+    }
+
+    // FALLBACK: Jika error karena kolom 'answers' tidak ditemukan
+    if (error && error.message && error.message.includes("'answers' column")) {
+        console.warn("Warning: Kolom 'answers' belum dibuat di database. Mencoba menyimpan tanpa detail jawaban.");
+        delete payload.answers;
+        
+        if (existing) {
+            const resRetry = await supabase.from('results').update(payload).eq('id', existing.id);
+            error = resRetry.error;
+        } else {
+            const resRetry = await supabase.from('results').insert([payload]);
+            error = resRetry.error;
+        }
     }
     
     if (error) handleError(error, 'Submit Ujian');
