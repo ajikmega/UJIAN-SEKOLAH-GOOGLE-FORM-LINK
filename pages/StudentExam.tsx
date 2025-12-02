@@ -506,7 +506,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
               <h3 className="text-2xl font-bold text-gray-800 mb-2">Selesaikan Ujian?</h3>
               <p className="text-gray-500 mb-8 max-w-xs mx-auto">
                  {exam.mode === 'GOOGLE_FORM' 
-                    ? "Pastikan Anda telah menekan tombol SUBMIT di dalam Google Form sebelum mengakhiri sesi ini." 
+                    ? "Pastikan Anda telah menekan tombol KIRIM di dalam Google Form sebelum mengakhiri sesi ini." 
                     : "Periksa kembali jawaban Anda. Setelah selesai, Anda tidak dapat mengubah jawaban lagi."}
               </p>
               <div className="flex gap-4">
