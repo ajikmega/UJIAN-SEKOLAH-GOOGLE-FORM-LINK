@@ -15,13 +15,10 @@ interface ErrorBoundaryState {
 
 // Error Boundary must be a Class Component
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      errorMsg: ''
-    };
-  }
+  state: ErrorBoundaryState = {
+    hasError: false,
+    errorMsg: ''
+  };
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true, errorMsg: error.toString() };
@@ -47,7 +44,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
-    return this.props.children;
+    // Cast props to any to avoid TypeScript error 'Property props does not exist on type ErrorBoundary'
+    return (this.props as any).children;
   }
 }
 
@@ -70,7 +68,9 @@ const AppContent: React.FC = () => {
 
   const handleLogout = () => {
     setUser(null);
-    localStorage.removeItem('exambit_user');
+    // Hapus semua data localstorage (termasuk jawaban sementara, user session, dll)
+    // agar bersih saat user berikutnya login
+    localStorage.clear();
   };
 
   if (!user) {
