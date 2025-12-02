@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
@@ -185,6 +185,9 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   });
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
+  
+  // State untuk melacak apakah sedang menggunakan link dari bank soal
+  const [isUsingBankLink, setIsUsingBankLink] = useState(false);
 
   useEffect(() => {
       if(isModalOpen) {
@@ -222,12 +225,18 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           googleFormUrl: '', 
           assignedClasses: [] 
       });
+      setIsUsingBankLink(false);
       setIsModalOpen(true);
   };
 
   const handleOpenEdit = (exam: Exam) => {
       setEditingId(exam.id);
       setNewExam({...exam});
+      
+      // Check if this url matches any in the bank to set isUsingBankLink
+      // Optimization: For now we assume manual edit allows everything unless we strictly track source
+      setIsUsingBankLink(false); // Reset to manual mode for editing to allow flexibility, or check against existing qs
+
       if (exam.startTime) {
           const d = new Date(exam.startTime);
           setScheduleDate(d.toISOString().split('T')[0]);
@@ -269,10 +278,32 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   const handleSelectFormFromBank = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const qId = e.target.value;
       const q = formQuestions.find(fq => fq.id === qId);
-      if (q && q.googleFormUrl) setNewExam({...newExam, googleFormUrl: q.googleFormUrl});
+      
+      if (q && q.googleFormUrl) {
+          // Parse text to get classes. Format expected: "XII-TKJ-1, XII-TKJ-2"
+          const classesFromBank = q.text ? q.text.split(',').map(c => c.trim()).filter(Boolean) : [];
+          
+          setNewExam({
+              ...newExam, 
+              googleFormUrl: q.googleFormUrl,
+              assignedClasses: classesFromBank
+          });
+          setIsUsingBankLink(true);
+      } else {
+          // Reset if deselected
+          setNewExam({
+              ...newExam, 
+              googleFormUrl: '',
+              assignedClasses: []
+          });
+          setIsUsingBankLink(false);
+      }
   };
 
   const handleClassToggle = (className: string) => {
+      // Jika menggunakan link bank soal, disable manual toggle
+      if (isUsingBankLink) return;
+
       const current = newExam.assignedClasses || [];
       if (current.includes(className)) setNewExam({ ...newExam, assignedClasses: current.filter(c => c !== className) });
       else setNewExam({ ...newExam, assignedClasses: [...current, className] });
@@ -338,6 +369,36 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <h3 className="text-xl font-bold mb-6 text-gray-800 border-b pb-4">{editingId ? 'Edit Ujian' : 'Buat Ujian Baru'}</h3>
         <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+          
+          <div className="space-y-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+              <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-blue-800 flex items-center gap-2"><Database size={14}/> Pilih Soal (Bank Link)</label>
+                  <select className="w-full px-3 py-2.5 border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" onChange={handleSelectFormFromBank}>
+                      <option value="">-- Pilih Link Tersimpan --</option>
+                      {formQuestions.map(q => <option key={q.id} value={q.id}>{q.text} ({q.topic})</option>)}
+                  </select>
+                  <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                      <Info size={12}/> Kelas akan otomatis terisi sesuai pengaturan Bank Soal.
+                  </p>
+              </div>
+              <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-blue-200"></div></div>
+                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-blue-50 px-2 text-blue-400 font-bold">Atau Input Manual</span></div>
+              </div>
+              <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-700">Paste URL Google Form</label>
+                  <Input 
+                    value={newExam.googleFormUrl} 
+                    onChange={e => {
+                        setNewExam({...newExam, googleFormUrl: e.target.value});
+                        setIsUsingBankLink(false); // Enable manual class selection if manual url input
+                    }} 
+                    placeholder="https://docs.google.com/forms/..." 
+                    className="text-sm" 
+                  />
+              </div>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-gray-700">Judul Ujian</label>
             <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Contoh: Penilaian Akhir Semester" />
@@ -371,33 +432,26 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           </div>
 
           <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">Enrollment (Peserta Kelas)</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 p-3 rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
+              <label className="text-sm font-semibold text-gray-700 flex justify-between">
+                  <span>Enrollment (Peserta Kelas)</span>
+                  {isUsingBankLink && <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Otomatis dari Bank Soal</span>}
+              </label>
+              <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 p-3 rounded-lg max-h-32 overflow-y-auto ${isUsingBankLink ? 'bg-gray-100 opacity-80' : 'bg-gray-50'}`}>
                   {availableClasses.map(cls => (
-                      <label key={cls.id} className={`flex items-center gap-2 text-sm p-2 rounded cursor-pointer transition-colors ${newExam.assignedClasses?.includes(cls.name) ? 'bg-blue-100 text-blue-800 font-medium' : 'hover:bg-gray-200'}`}>
-                          <input type="checkbox" checked={newExam.assignedClasses?.includes(cls.name) || false} onChange={() => handleClassToggle(cls.name)} className="rounded text-blue-600 focus:ring-blue-500" />
+                      <label key={cls.id} className={`flex items-center gap-2 text-sm p-2 rounded transition-colors ${!isUsingBankLink ? 'cursor-pointer hover:bg-gray-200' : 'cursor-default'} ${newExam.assignedClasses?.includes(cls.name) ? 'bg-blue-100 text-blue-800 font-medium' : ''}`}>
+                          <input 
+                            type="checkbox" 
+                            checked={newExam.assignedClasses?.includes(cls.name) || false} 
+                            onChange={() => handleClassToggle(cls.name)} 
+                            className="rounded text-blue-600 focus:ring-blue-500" 
+                            disabled={isUsingBankLink}
+                          />
                           {cls.name}
                       </label>
                   ))}
               </div>
           </div>
-          <div className="space-y-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-              <div className="space-y-1.5">
-                  <label className="text-sm font-bold text-blue-800 flex items-center gap-2"><Database size={14}/> Pilih Soal (Bank Link)</label>
-                  <select className="w-full px-3 py-2.5 border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" onChange={handleSelectFormFromBank}>
-                      <option value="">-- Pilih Link Tersimpan --</option>
-                      {formQuestions.map(q => <option key={q.id} value={q.id}>{q.text} ({q.topic})</option>)}
-                  </select>
-              </div>
-              <div className="relative py-2">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-blue-200"></div></div>
-                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-blue-50 px-2 text-blue-400 font-bold">Atau</span></div>
-              </div>
-              <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-700">Paste URL Google Form Manual</label>
-                  <Input value={newExam.googleFormUrl} onChange={e => setNewExam({...newExam, googleFormUrl: e.target.value})} placeholder="https://docs.google.com/forms/..." className="text-sm" />
-              </div>
-          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
             <Button onClick={handleSave} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan Ujian'}</Button>
@@ -561,3 +615,4 @@ const ClassManager: React.FC = () => {
         </Card>
     )
 };
+    
