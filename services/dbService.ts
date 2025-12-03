@@ -244,35 +244,9 @@ const apiDb = {
   },
 
   submitExam: async (result: ExamResult) => {
-    const { data: existing } = await supabase
-        .from('results')
-        .select('id')
-        .eq('exam_id', result.examId)
-        .eq('student_name', result.studentName)
-        .maybeSingle();
-
-    let error;
-    // REVISI: Menghapus 'answers' dari payload agar tidak error jika kolom belum dibuat
-    const payload: any = {
-        exam_id: result.examId,
-        student_name: result.studentName,
-        class_name: result.className,
-        score: result.score,
-        status: result.status,
-        completed_at: result.completedAt,
-        violation_count: result.violationCount
-        // answers field removed as requested
-    };
-
-    if (existing) {
-        const res = await supabase.from('results').update(payload).eq('id', existing.id);
-        error = res.error;
-    } else {
-        const res = await supabase.from('results').insert([payload]);
-        error = res.error;
-    }
-    
-    if (error) handleError(error, 'Submit Ujian');
+    // FITUR DINONAKTIFKAN SESUAI REQUEST
+    // Tidak ada penyimpanan hasil ujian ke database.
+    return;
   },
 
   // ANALYTICS & SYNC

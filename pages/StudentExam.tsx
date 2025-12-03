@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, Menu, CloudUpload } from 'lucide-react';
+import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, CloudUpload } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -96,23 +96,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     if (inputToken.toUpperCase() === selectedExam.token) {
         setIsStarting(true);
         
-        // 1. REKAM KEHADIRAN (Attendance)
-        // Kirim status IN_PROGRESS agar admin tahu siswa sudah login dan masuk
-        try {
-            await db.submitExam({
-                examId: selectedExam.id,
-                studentName: user.fullName || user.username,
-                className: user.className || '',
-                score: 0,
-                status: 'IN_PROGRESS',
-                completedAt: new Date().toISOString(),
-                violationCount: 0,
-                answers: { 'info': 'Ujian dimulai (Redirect ke G-Form)' }
-            });
-        } catch (e) {
-            console.warn("Gagal mencatat log kehadiran:", e);
-        }
-
+        // 1. REKAM KEHADIRAN (Attendance) -> DIHAPUS (Tidak menyimpan ke DB)
+        
         // 2. PROSES SESUAI MODE
         if (selectedExam.mode === 'GOOGLE_FORM' && selectedExam.googleFormUrl) {
             // MODE GOOGLE FORM: Redirect Langsung (Landing Page)
@@ -143,30 +128,16 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleFinish = async (score: number = 0, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED') => {
     if (activeExam) {
-        try {
-            const resultPayload = {
-                examId: activeExam.id,
-                studentName: user.fullName || user.username,
-                className: user.className || '',
-                score: score,
-                status: status,
-                completedAt: new Date().toISOString(),
-                violationCount: 0,
-                answers: JSON.parse(localStorage.getItem(`exambit_answers_${activeExam.id}`) || '{}')
-            };
+        // FITUR SIMPAN HASIL DIMATIKAN
+        // Hanya membersihkan local storage dan kembali ke halaman selesai.
 
-            await db.submitExam(resultPayload);
+        localStorage.removeItem('exambit_active_exam'); 
+        localStorage.removeItem('exambit_exam_start_timestamp'); 
+        localStorage.removeItem(`exambit_answers_${activeExam.id}`);
+        localStorage.removeItem(`exambit_q_index_${activeExam.id}`);
 
-            localStorage.removeItem('exambit_active_exam'); 
-            localStorage.removeItem('exambit_exam_start_timestamp'); 
-            localStorage.removeItem(`exambit_answers_${activeExam.id}`);
-            localStorage.removeItem(`exambit_q_index_${activeExam.id}`);
-
-            setIsExamFinished(true); 
-            setActiveExam(null);
-        } catch (e: any) {
-            alert("Gagal menyimpan hasil: " + e.message + "\nSilakan coba lagi atau hubungi pengawas.");
-        }
+        setIsExamFinished(true); 
+        setActiveExam(null);
     }
   };
 
@@ -181,7 +152,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
           </div>
           <h2 className="text-3xl font-extrabold text-gray-800 mb-3 tracking-tight">Sesi Berakhir</h2>
           <p className="text-gray-500 mb-10 leading-relaxed">
-            Jawaban Anda telah tersimpan.<br/>
+            Jawaban Anda telah tersimpan secara lokal.<br/>
             Terima kasih telah mengikuti ujian ini.
           </p>
           <Button 
@@ -330,44 +301,16 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   });
 
   const [questions, setQuestions] = useState<Question[]>([]);
-  // State indikator save
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
   useEffect(() => {
       localStorage.setItem(`exambit_answers_${exam.id}`, JSON.stringify(answers));
-      setSaveStatus('saved');
   }, [answers, exam.id]);
 
   useEffect(() => {
       localStorage.setItem(`exambit_q_index_${exam.id}`, currentQIndex.toString());
   }, [currentQIndex, exam.id]);
 
-  useEffect(() => {
-      if (exam.mode === 'NATIVE') {
-        const interval = setInterval(async () => {
-            if (Object.keys(answers).length > 0) {
-                setSaveStatus('saving');
-                try {
-                    await db.submitExam({
-                        examId: exam.id,
-                        studentName: user.fullName || user.username,
-                        className: user.className || '',
-                        score: 0,
-                        status: 'IN_PROGRESS',
-                        completedAt: new Date().toISOString(),
-                        violationCount: 0,
-                        answers: answers
-                    });
-                    setSaveStatus('saved');
-                } catch (e) {
-                    console.warn("Auto save failed", e);
-                    setSaveStatus('error');
-                }
-            }
-        }, 30000);
-        return () => clearInterval(interval);
-      }
-  }, [exam, user, answers]);
+  // AUTO SAVE DIHAPUS
 
   useEffect(() => {
     const loadQuestions = async () => {
@@ -421,9 +364,6 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                 <span className="font-medium text-white truncate max-w-[100px] md:max-w-none">{user.fullName}</span>
                 <span className="w-1 h-1 bg-blue-400 rounded-full flex-shrink-0"></span>
                 <span>{user.className}</span>
-                <span className={`ml-2 flex items-center gap-1 ${saveStatus === 'error' ? 'text-red-300' : 'text-blue-300'}`}>
-                    <CloudUpload size={10} /> {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Retry'}
-                </span>
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-4">
