@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info, AlertTriangle } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info, AlertTriangle, AlertCircle } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
@@ -105,13 +105,37 @@ const DashboardOverview: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const handleResetData = async () => {
+        if (confirm("PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data hasil ujian siswa?\n\nTindakan ini tidak dapat dibatalkan. Data nilai dan sesi akan dihapus bersih.")) {
+            try {
+                setLoading(true);
+                await db.resetDatabase();
+                alert("Data berhasil dihapus.");
+                // Refresh stats
+                const data = await db.getGlobalStats();
+                setStats(data);
+            } catch (e: any) {
+                alert("Gagal menghapus data: " + e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
     if(loading) return <div className="p-12 text-center text-gray-400 animate-pulse">Memuat data statistik...</div>;
 
     return (
         <div className="space-y-8">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">Selamat Datang, Admin!</h2>
-              <p className="text-gray-500">Berikut adalah ringkasan aktivitas ujian hari ini.</p>
+            <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">Selamat Datang, Admin!</h2>
+                  <p className="text-gray-500">Berikut adalah ringkasan aktivitas ujian hari ini.</p>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="danger" size="sm" onClick={handleResetData} className="text-xs bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 shadow-none">
+                        <Trash2 size={14} /> Hapus Data Hasil
+                    </Button>
+                </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

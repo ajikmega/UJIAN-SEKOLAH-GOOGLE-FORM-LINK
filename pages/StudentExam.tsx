@@ -37,6 +37,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [inputToken, setInputToken] = useState('');
   const [tokenError, setTokenError] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
     // Initial Heartbeat
@@ -89,28 +90,59 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleInitiateExam = (exam: Exam) => { setSelectedExam(exam); setInputToken(''); setTokenError(''); };
 
-  const handleSubmitToken = () => {
+  const handleSubmitToken = async () => {
     if (!selectedExam) return;
+    
     if (inputToken.toUpperCase() === selectedExam.token) {
-        const examState = { ...selectedExam, _studentUser: user.username };
+        setIsStarting(true);
         
-        // Simpan state ujian aktif
-        localStorage.setItem('exambit_active_exam', JSON.stringify(examState));
-        
-        // Simpan waktu mulai jika belum ada
-        if (!localStorage.getItem('exambit_exam_start_timestamp')) {
-            localStorage.setItem('exambit_exam_start_timestamp', Date.now().toString());
+        // 1. REKAM KEHADIRAN (Attendance)
+        // Kirim status IN_PROGRESS agar admin tahu siswa sudah login dan masuk
+        try {
+            await db.submitExam({
+                examId: selectedExam.id,
+                studentName: user.fullName || user.username,
+                className: user.className || '',
+                score: 0,
+                status: 'IN_PROGRESS',
+                completedAt: new Date().toISOString(),
+                violationCount: 0,
+                answers: { 'info': 'Ujian dimulai (Redirect ke G-Form)' }
+            });
+        } catch (e) {
+            console.warn("Gagal mencatat log kehadiran:", e);
         }
-        
-        setActiveExam(examState); 
-        setSelectedExam(null); 
-    } else { setTokenError('Token tidak valid!'); }
+
+        // 2. PROSES SESUAI MODE
+        if (selectedExam.mode === 'GOOGLE_FORM' && selectedExam.googleFormUrl) {
+            // MODE GOOGLE FORM: Redirect Langsung (Landing Page)
+            // Tanpa Iframe, Tanpa Timer, Tanpa Tombol Selesai di App
+            window.location.href = selectedExam.googleFormUrl;
+            
+            // Reset state lokal (fallback jika user kembali/back)
+            setSelectedExam(null);
+            setIsStarting(false);
+        } else {
+            // MODE NATIVE: Masuk ke ExamRoom (dengan Timer dll)
+            const examState = { ...selectedExam, _studentUser: user.username };
+            
+            localStorage.setItem('exambit_active_exam', JSON.stringify(examState));
+            if (!localStorage.getItem('exambit_exam_start_timestamp')) {
+                localStorage.setItem('exambit_exam_start_timestamp', Date.now().toString());
+            }
+            
+            setActiveExam(examState); 
+            setSelectedExam(null);
+            setIsStarting(false);
+        }
+    } else { 
+        setTokenError('Token tidak valid!'); 
+    }
   };
 
   const handleFinish = async (score: number = 0, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED') => {
     if (activeExam) {
         try {
-            // FIX: Submit hasil ke database
             const resultPayload = {
                 examId: activeExam.id,
                 studentName: user.fullName || user.username,
@@ -119,14 +151,11 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
                 status: status,
                 completedAt: new Date().toISOString(),
                 violationCount: 0,
-                answers: activeExam.mode === 'GOOGLE_FORM' 
-                    ? { 'info': 'Dikerjakan via Google Form' } // Placeholder for G-Form
-                    : JSON.parse(localStorage.getItem(`exambit_answers_${activeExam.id}`) || '{}')
+                answers: JSON.parse(localStorage.getItem(`exambit_answers_${activeExam.id}`) || '{}')
             };
 
             await db.submitExam(resultPayload);
 
-            // Bersihkan storage setelah sukses submit
             localStorage.removeItem('exambit_active_exam'); 
             localStorage.removeItem('exambit_exam_start_timestamp'); 
             localStorage.removeItem(`exambit_answers_${activeExam.id}`);
@@ -264,8 +293,10 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
                 {tokenError && <p className="text-red-500 text-sm mt-3 animate-pulse font-medium bg-red-50 py-1 rounded">{tokenError}</p>}
             </div>
             <div className="flex gap-3 pt-4 border-t border-gray-100 mt-4">
-                <Button variant="outline" className="flex-1 py-3" onClick={() => setSelectedExam(null)}>Batal</Button>
-                <Button className="flex-1 py-3 text-lg" onClick={handleSubmitToken}>Mulai</Button>
+                <Button variant="outline" className="flex-1 py-3" onClick={() => setSelectedExam(null)} disabled={isStarting}>Batal</Button>
+                <Button className="flex-1 py-3 text-lg" onClick={handleSubmitToken} disabled={isStarting}>
+                    {isStarting ? 'Memproses...' : 'Mulai'}
+                </Button>
             </div>
         </div>
       </Modal>
@@ -273,6 +304,7 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   );
 };
 
+// EXAM ROOM HANYA UNTUK MODE NATIVE SEKARANG
 const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, status?: 'COMPLETED' | 'CHEATING_SUSPECTED') => void }> = ({ exam, user, onFinish }) => {
   const [timeLeft, setTimeLeft] = useState(() => {
       const startStr = localStorage.getItem('exambit_exam_start_timestamp');
@@ -300,29 +332,21 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
   // State indikator save
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
-  // FIX: Simpan Jawaban ke LocalStorage setiap ada perubahan
   useEffect(() => {
       localStorage.setItem(`exambit_answers_${exam.id}`, JSON.stringify(answers));
       setSaveStatus('saved');
   }, [answers, exam.id]);
 
-  // FIX: Simpan Posisi Soal ke LocalStorage setiap pindah soal
   useEffect(() => {
       localStorage.setItem(`exambit_q_index_${exam.id}`, currentQIndex.toString());
   }, [currentQIndex, exam.id]);
 
-  // FIX: Cloud Auto Save interval (Setiap 30 detik)
   useEffect(() => {
       if (exam.mode === 'NATIVE') {
         const interval = setInterval(async () => {
             if (Object.keys(answers).length > 0) {
                 setSaveStatus('saving');
                 try {
-                    // Kita gunakan submitExam tapi dengan status IN_PROGRESS jika didukung backend
-                    // atau simpan ke tabel session/drafts. 
-                    // Karena struktur tabel results unique pair (exam_id, student_name), 
-                    // kita bisa upsert status 'IN_PROGRESS'
-                    
                     await db.submitExam({
                         examId: exam.id,
                         studentName: user.fullName || user.username,
@@ -364,9 +388,6 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
 
   useEffect(() => { if (timeLeft === 0) calculateAndFinish('COMPLETED'); }, [timeLeft]);
   
-  // Heartbeat is handled in parent component now or we can keep it here for redundancy
-  // useEffect(() => { const sendSignal = async () => { try { await db.sendHeartbeat(user); } catch(e) {} }; const interval = setInterval(sendSignal, 30000); return () => clearInterval(interval); }, [user]);
-
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -386,9 +407,11 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
 
   const currentQuestion = questions[currentQIndex];
 
+  // FALLBACK JIKA MODENYA GOOGLE FORM TAPI MASUK SINI (Harusnya tidak mungkin karena redirect)
+  if (exam.mode === 'GOOGLE_FORM') return null;
+
   return (
     <div className="h-dvh flex flex-col bg-gray-100 overflow-hidden font-sans">
-      {/* Header Compact for Mobile */}
       <div className="bg-[#0f4c81] text-white shadow-md z-30 flex-shrink-0 relative">
         <div className="container mx-auto px-4 h-14 md:h-16 flex justify-between items-center">
             <div className="flex flex-col min-w-0 mr-4">
@@ -397,11 +420,9 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                 <span className="font-medium text-white truncate max-w-[100px] md:max-w-none">{user.fullName}</span>
                 <span className="w-1 h-1 bg-blue-400 rounded-full flex-shrink-0"></span>
                 <span>{user.className}</span>
-                {exam.mode === 'NATIVE' && (
-                    <span className={`ml-2 flex items-center gap-1 ${saveStatus === 'error' ? 'text-red-300' : 'text-blue-300'}`}>
-                        <CloudUpload size={10} /> {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Retry'}
-                    </span>
-                )}
+                <span className={`ml-2 flex items-center gap-1 ${saveStatus === 'error' ? 'text-red-300' : 'text-blue-300'}`}>
+                    <CloudUpload size={10} /> {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Retry'}
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-4">
@@ -417,86 +438,74 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
                 className="h-9 md:h-10 text-xs font-bold shadow-md bg-red-600 text-white hover:bg-red-700 border-none flex items-center gap-2 px-3"
                >
                  <LogOut size={16} /> 
-                 <span className="hidden md:inline">Log Out</span>
+                 <span className="hidden md:inline">Selesai</span>
                </Button>
             </div>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden relative">
-          {exam.mode === 'GOOGLE_FORM' ? (
-               <div className="flex-1 bg-white w-full h-full relative">
-                 {exam.googleFormUrl ? <iframe src={exam.googleFormUrl} className="w-full h-full border-none block" title="Google Form" allow="fullscreen"></iframe> : <div className="p-10 text-center">URL Form Tidak Valid</div>}
-               </div>
-          ) : (
-              <>
-                  {/* Left Side: Question Area */}
-                  <div className="flex-1 bg-white overflow-y-auto flex flex-col relative z-0">
-                      {questions.length > 0 && currentQuestion ? (
-                          <div className="max-w-4xl mx-auto p-4 md:p-8 w-full pb-20 md:pb-12">
-                              <div className="flex justify-between items-center mb-4 md:mb-6 border-b pb-3 md:pb-4 sticky top-0 bg-white z-10 pt-2">
-                                <span className="text-gray-500 font-bold text-sm md:text-lg">Soal No. <span className="text-blue-600 text-xl md:text-2xl ml-1">{currentQIndex + 1}</span></span>
-                                <span className="bg-blue-50 text-blue-700 text-[10px] md:text-xs font-bold px-2 py-1 md:px-3 rounded-full uppercase tracking-wide border border-blue-100">{currentQuestion.type === 'MULTIPLE_CHOICE' ? 'Pilihan Ganda' : 'Esai'}</span>
-                              </div>
-                              
-                              <div className="text-base md:text-xl text-gray-800 mb-6 md:mb-8 leading-relaxed font-medium select-text">
-                                  {currentQuestion.text}
-                              </div>
-                              
-                              <div className="space-y-3 md:space-y-4">
-                                {currentQuestion.type === 'MULTIPLE_CHOICE' && currentQuestion.options?.map((opt, idx) => (
-                                    <label key={idx} className={`flex items-start md:items-center p-3 md:p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group active:scale-[0.99] ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-50 border-blue-500 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}>
-                                        <div className={`mt-0.5 md:mt-0 w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center mr-3 md:mr-4 flex-shrink-0 transition-colors ${answers[currentQuestion.id] === idx.toString() ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 group-hover:border-gray-400'}`}>
-                                            {answers[currentQuestion.id] === idx.toString() && <div className="w-2 h-2 md:w-2.5 md:h-2.5 bg-white rounded-full" />}
-                                        </div>
-                                        <input type="radio" name={`q-${currentQuestion.id}`} className="hidden" checked={answers[currentQuestion.id] === idx.toString()} onChange={() => setAnswers({...answers, [currentQuestion.id]: idx.toString()})} />
-                                        <span className={`text-sm md:text-lg leading-snug ${answers[currentQuestion.id] === idx.toString() ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>{opt}</span>
-                                    </label>
-                                ))}
-                                {currentQuestion.type === 'ESSAY' && (
-                                    <textarea 
-                                        className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[150px] md:min-h-[200px] text-base md:text-lg leading-relaxed shadow-inner"
-                                        placeholder="Ketik jawaban Anda di sini..."
-                                        value={answers[currentQuestion.id] || ''}
-                                        onChange={e => setAnswers({...answers, [currentQuestion.id]: e.target.value})}
-                                    ></textarea>
-                                )}
-                              </div>
-                          </div>
-                      ) : ( <div className="text-center py-20 text-gray-400">{questions.length === 0 ? "Memuat soal..." : "Soal tidak ditemukan."}</div> )}
-                  </div>
-                  
-                  {/* Right/Bottom Side: Navigation & Actions */}
-                  {/* On Mobile: It sits at bottom with max height. On Desktop: Full height sidebar on right */}
-                  <div className="w-full md:w-72 lg:w-80 bg-gray-50 border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:shadow-inner flex-shrink-0 z-20">
-                      <div className="p-3 md:p-6 bg-gray-100 md:bg-transparent border-b border-gray-200 flex justify-between items-center md:block">
-                         <h3 className="font-bold text-gray-700 md:mb-4 flex items-center gap-2 text-xs md:text-sm uppercase tracking-wide"><LayoutGrid size={16} /> Navigasi Soal</h3>
-                         <span className="md:hidden text-xs text-gray-500 font-mono">{answers[currentQuestion?.id || ''] ? 'Terjawab' : 'Belum dijawab'}</span>
+          <div className="flex-1 bg-white overflow-y-auto flex flex-col relative z-0">
+              {questions.length > 0 && currentQuestion ? (
+                  <div className="max-w-4xl mx-auto p-4 md:p-8 w-full pb-20 md:pb-12">
+                      <div className="flex justify-between items-center mb-4 md:mb-6 border-b pb-3 md:pb-4 sticky top-0 bg-white z-10 pt-2">
+                        <span className="text-gray-500 font-bold text-sm md:text-lg">Soal No. <span className="text-blue-600 text-xl md:text-2xl ml-1">{currentQIndex + 1}</span></span>
+                        <span className="bg-blue-50 text-blue-700 text-[10px] md:text-xs font-bold px-2 py-1 md:px-3 rounded-full uppercase tracking-wide border border-blue-100">{currentQuestion.type === 'MULTIPLE_CHOICE' ? 'Pilihan Ganda' : 'Esai'}</span>
                       </div>
                       
-                      {/* Grid Container: Scrollable on mobile if too many questions */}
-                      <div className="flex-1 overflow-y-auto p-3 md:p-4 max-h-[35vh] md:max-h-full custom-scrollbar bg-gray-50 md:bg-transparent">
-                          <div className="grid grid-cols-5 md:grid-cols-5 gap-2 content-start">
-                              {questions.map((_, idx) => (
-                                  <button key={idx} onClick={() => setCurrentQIndex(idx)}
-                                    className={`aspect-square rounded-lg flex items-center justify-center text-xs md:text-sm font-bold transition-all shadow-sm ${
-                                        currentQIndex === idx ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 transform scale-105 z-10' : 
-                                        answers[questions[idx].id] ? 'bg-emerald-500 text-white border-transparent' : 'bg-white border border-gray-200 text-gray-600 hover:bg-white hover:border-blue-300'
-                                    }`}
-                                  >
-                                      {idx + 1}
-                                  </button>
-                              ))}
-                          </div>
+                      <div className="text-base md:text-xl text-gray-800 mb-6 md:mb-8 leading-relaxed font-medium select-text">
+                          {currentQuestion.text}
                       </div>
                       
-                      <div className="p-3 md:p-6 bg-white border-t border-gray-200 flex gap-2 md:gap-3">
-                              <Button variant="outline" className="flex-1 h-10 md:h-auto" onClick={() => setCurrentQIndex(Math.max(0, currentQIndex - 1))} disabled={currentQIndex === 0}><ChevronLeft size={16}/></Button>
-                              <Button variant="outline" className="flex-1 h-10 md:h-auto" onClick={() => setCurrentQIndex(Math.min(questions.length - 1, currentQIndex + 1))} disabled={currentQIndex === questions.length - 1}><ChevronRight size={16}/></Button>
+                      <div className="space-y-3 md:space-y-4">
+                        {currentQuestion.type === 'MULTIPLE_CHOICE' && currentQuestion.options?.map((opt, idx) => (
+                            <label key={idx} className={`flex items-start md:items-center p-3 md:p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group active:scale-[0.99] ${answers[currentQuestion.id] === idx.toString() ? 'bg-blue-50 border-blue-500 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300 hover:bg-gray-50'}`}>
+                                <div className={`mt-0.5 md:mt-0 w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center mr-3 md:mr-4 flex-shrink-0 transition-colors ${answers[currentQuestion.id] === idx.toString() ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 group-hover:border-gray-400'}`}>
+                                    {answers[currentQuestion.id] === idx.toString() && <div className="w-2 h-2 md:w-2.5 md:h-2.5 bg-white rounded-full" />}
+                                </div>
+                                <input type="radio" name={`q-${currentQuestion.id}`} className="hidden" checked={answers[currentQuestion.id] === idx.toString()} onChange={() => setAnswers({...answers, [currentQuestion.id]: idx.toString()})} />
+                                <span className={`text-sm md:text-lg leading-snug ${answers[currentQuestion.id] === idx.toString() ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>{opt}</span>
+                            </label>
+                        ))}
+                        {currentQuestion.type === 'ESSAY' && (
+                            <textarea 
+                                className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[150px] md:min-h-[200px] text-base md:text-lg leading-relaxed shadow-inner"
+                                placeholder="Ketik jawaban Anda di sini..."
+                                value={answers[currentQuestion.id] || ''}
+                                onChange={e => setAnswers({...answers, [currentQuestion.id]: e.target.value})}
+                            ></textarea>
+                        )}
                       </div>
                   </div>
-              </>
-          )}
+              ) : ( <div className="text-center py-20 text-gray-400">{questions.length === 0 ? "Memuat soal..." : "Soal tidak ditemukan."}</div> )}
+          </div>
+          
+          <div className="w-full md:w-72 lg:w-80 bg-gray-50 border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:shadow-inner flex-shrink-0 z-20">
+              <div className="p-3 md:p-6 bg-gray-100 md:bg-transparent border-b border-gray-200 flex justify-between items-center md:block">
+                 <h3 className="font-bold text-gray-700 md:mb-4 flex items-center gap-2 text-xs md:text-sm uppercase tracking-wide"><LayoutGrid size={16} /> Navigasi Soal</h3>
+                 <span className="md:hidden text-xs text-gray-500 font-mono">{answers[currentQuestion?.id || ''] ? 'Terjawab' : 'Belum dijawab'}</span>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-3 md:p-4 max-h-[35vh] md:max-h-full custom-scrollbar bg-gray-50 md:bg-transparent">
+                  <div className="grid grid-cols-5 md:grid-cols-5 gap-2 content-start">
+                      {questions.map((_, idx) => (
+                          <button key={idx} onClick={() => setCurrentQIndex(idx)}
+                            className={`aspect-square rounded-lg flex items-center justify-center text-xs md:text-sm font-bold transition-all shadow-sm ${
+                                currentQIndex === idx ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 transform scale-105 z-10' : 
+                                answers[questions[idx].id] ? 'bg-emerald-500 text-white border-transparent' : 'bg-white border border-gray-200 text-gray-600 hover:bg-white hover:border-blue-300'
+                            }`}
+                          >
+                              {idx + 1}
+                          </button>
+                      ))}
+                  </div>
+              </div>
+              
+              <div className="p-3 md:p-6 bg-white border-t border-gray-200 flex gap-2 md:gap-3">
+                      <Button variant="outline" className="flex-1 h-10 md:h-auto" onClick={() => setCurrentQIndex(Math.max(0, currentQIndex - 1))} disabled={currentQIndex === 0}><ChevronLeft size={16}/></Button>
+                      <Button variant="outline" className="flex-1 h-10 md:h-auto" onClick={() => setCurrentQIndex(Math.min(questions.length - 1, currentQIndex + 1))} disabled={currentQIndex === questions.length - 1}><ChevronRight size={16}/></Button>
+              </div>
+          </div>
       </div>
 
       <Modal isOpen={showConfirmFinish} onClose={() => setShowConfirmFinish(false)}>
@@ -504,9 +513,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
               <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6"><LayoutGrid size={40} /></div>
               <h3 className="text-2xl font-bold text-gray-800 mb-2">Selesaikan Ujian?</h3>
               <p className="text-gray-500 mb-8 max-w-xs mx-auto">
-                 {exam.mode === 'GOOGLE_FORM' 
-                    ? "Pastikan Anda telah menekan tombol KIRIM di dalam Google Form sebelum mengakhiri sesi ini." 
-                    : "Periksa kembali jawaban Anda. Setelah selesai, Anda tidak dapat mengubah jawaban lagi."}
+                 Periksa kembali jawaban Anda. Setelah selesai, Anda tidak dapat mengubah jawaban lagi.
               </p>
               <div className="flex gap-4">
                   <Button variant="outline" className="flex-1 py-3" onClick={() => setShowConfirmFinish(false)}>Batal</Button>
