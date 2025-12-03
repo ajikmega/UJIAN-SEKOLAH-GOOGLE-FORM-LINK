@@ -117,7 +117,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
         if (selectedExam.mode === 'GOOGLE_FORM' && selectedExam.googleFormUrl) {
             // MODE GOOGLE FORM: Redirect Langsung (Landing Page)
             // Tanpa Iframe, Tanpa Timer, Tanpa Tombol Selesai di App
-            window.location.href = selectedExam.googleFormUrl;
+            // Menggunakan window.open untuk membuka di tab baru
+            window.open(selectedExam.googleFormUrl, '_blank');
             
             // Reset state lokal (fallback jika user kembali/back)
             setSelectedExam(null);
