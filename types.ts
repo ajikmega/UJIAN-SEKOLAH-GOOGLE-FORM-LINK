@@ -21,6 +21,7 @@ export interface Exam {
   googleFormUrl?: string;
   examPackageId?: string; // For Native exams
   token: string;
+  useToken: boolean; // NEW: Option to enable/disable token
   durationMinutes: number;
   isActive: boolean;
   assignedClasses: string[];

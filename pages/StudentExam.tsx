@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, CloudUpload } from 'lucide-react';
+import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, CloudUpload, ArrowRight } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -93,7 +93,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const handleSubmitToken = async () => {
     if (!selectedExam) return;
     
-    if (inputToken.toUpperCase() === selectedExam.token) {
+    // Check if exam requires token. If not, bypass check.
+    if (!selectedExam.useToken || inputToken.toUpperCase() === selectedExam.token) {
         setIsStarting(true);
         
         // 1. REKAM KEHADIRAN (Attendance) -> DIHAPUS (Tidak menyimpan ke DB)
@@ -249,25 +250,40 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
       <Modal isOpen={!!selectedExam} onClose={() => setSelectedExam(null)}>
         <div className="text-center space-y-6 px-2 py-4">
             <div>
-                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-sm"><Key size={32} /></div>
-                <h3 className="text-2xl font-bold text-gray-800">Masukkan Token</h3>
-                <p className="text-gray-500 text-sm mt-2">Minta token kepada pengawas untuk membuka soal:<br/><span className="font-semibold text-blue-600">{selectedExam?.title}</span></p>
+                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-sm">
+                    {selectedExam?.useToken ? <Key size={32} /> : <ArrowRight size={32} />}
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800">{selectedExam?.useToken ? "Masukkan Token" : "Siap Mengerjakan?"}</h3>
+                <p className="text-gray-500 text-sm mt-2">
+                    {selectedExam?.useToken 
+                        ? <>Minta token kepada pengawas untuk membuka soal:<br/><span className="font-semibold text-blue-600">{selectedExam?.title}</span></>
+                        : <>Anda akan memulai ujian untuk:<br/><span className="font-semibold text-blue-600">{selectedExam?.title}</span></>
+                    }
+                </p>
             </div>
-            <div className="max-w-xs mx-auto">
-                <Input 
-                    value={inputToken} 
-                    onChange={(e) => { setInputToken(e.target.value.toUpperCase()); setTokenError(''); }}
-                    placeholder="TOKEN"
-                    className="text-center font-mono text-3xl font-bold tracking-[0.5em] uppercase py-4 border-2 focus:border-blue-500 focus:ring-0 rounded-xl placeholder:text-gray-200"
-                    maxLength={10}
-                    autoFocus
-                />
-                {tokenError && <p className="text-red-500 text-sm mt-3 animate-pulse font-medium bg-red-50 py-1 rounded">{tokenError}</p>}
-            </div>
+            
+            {selectedExam?.useToken ? (
+                <div className="max-w-xs mx-auto animate-fade-in">
+                    <Input 
+                        value={inputToken} 
+                        onChange={(e) => { setInputToken(e.target.value.toUpperCase()); setTokenError(''); }}
+                        placeholder="TOKEN"
+                        className="text-center font-mono text-3xl font-bold tracking-[0.5em] uppercase py-4 border-2 focus:border-blue-500 focus:ring-0 rounded-xl placeholder:text-gray-200"
+                        maxLength={10}
+                        autoFocus
+                    />
+                    {tokenError && <p className="text-red-500 text-sm mt-3 animate-pulse font-medium bg-red-50 py-1 rounded">{tokenError}</p>}
+                </div>
+            ) : (
+                <div className="p-4 bg-green-50 text-green-700 rounded-lg text-sm border border-green-100 max-w-xs mx-auto">
+                    Ujian ini tidak memerlukan token.
+                </div>
+            )}
+
             <div className="flex gap-3 pt-4 border-t border-gray-100 mt-4">
                 <Button variant="outline" className="flex-1 py-3" onClick={() => setSelectedExam(null)} disabled={isStarting}>Batal</Button>
                 <Button className="flex-1 py-3 text-lg" onClick={handleSubmitToken} disabled={isStarting}>
-                    {isStarting ? 'Memproses...' : 'Mulai'}
+                    {isStarting ? 'Memproses...' : 'Mulai Ujian'}
                 </Button>
             </div>
         </div>

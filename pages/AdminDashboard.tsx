@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { Exam, ClassGroup, Question } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info, AlertTriangle, AlertCircle, RefreshCw, Wand2, ToggleRight, CheckSquare } from 'lucide-react';
 
 export const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'exams' | 'classes' | 'questions'>('dashboard');
@@ -83,6 +83,26 @@ const NavButton: React.FC<{ active: boolean, onClick: () => void, icon: React.Re
     <span>{label}</span>
   </button>
 );
+
+// HELPER: Fetch Title from URL using CORS Proxy
+const fetchGoogleFormTitle = async (url: string): Promise<string | null> => {
+    if (!url.includes('docs.google.com/forms')) return null;
+    
+    try {
+        const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+        
+        if (data.contents) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(data.contents, "text/html");
+            const title = doc.querySelector("title")?.innerText || "";
+            return title.replace(/ - Google Forms/g, "").replace(/ - Google Formulir/g, "").trim();
+        }
+    } catch (e) {
+        console.warn("Gagal mengambil judul form otomatis:", e);
+    }
+    return null;
+};
 
 // --- Dashboard Overview ---
 const DashboardOverview: React.FC = () => {
@@ -202,16 +222,16 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   const [formQuestions, setFormQuestions] = useState<Question[]>([]);
   const [availableClasses, setAvailableClasses] = useState<ClassGroup[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isFetchingTitle, setIsFetchingTitle] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newExam, setNewExam] = useState<Partial<Exam>>({ 
-    title: '', token: '', durationMinutes: 60, mode: 'GOOGLE_FORM', googleFormUrl: '', assignedClasses: [] 
+    title: '', token: '', useToken: true, durationMinutes: 60, mode: 'GOOGLE_FORM', googleFormUrl: '', assignedClasses: [] 
   });
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   
-  // State untuk melacak apakah sedang menggunakan link dari bank soal
   const [isUsingBankLink, setIsUsingBankLink] = useState(false);
 
   useEffect(() => {
@@ -237,7 +257,6 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
 
   const handleOpenCreate = () => {
       setEditingId(null);
-      // Set default to today
       const today = new Date();
       const dateStr = today.toISOString().split('T')[0];
       
@@ -246,7 +265,8 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
       
       setNewExam({ 
           title: '', 
-          token: '', // Initialize empty token
+          token: '',
+          useToken: true, 
           durationMinutes: 60, 
           mode: 'GOOGLE_FORM', 
           googleFormUrl: '', 
@@ -258,11 +278,8 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
 
   const handleOpenEdit = (exam: Exam) => {
       setEditingId(exam.id);
-      setNewExam({...exam});
-      
-      // Check if this url matches any in the bank to set isUsingBankLink
-      // Optimization: For now we assume manual edit allows everything unless we strictly track source
-      setIsUsingBankLink(false); // Reset to manual mode for editing to allow flexibility, or check against existing qs
+      setNewExam({...exam, useToken: exam.useToken !== false}); // Ensure boolean
+      setIsUsingBankLink(false);
 
       if (exam.startTime) {
           const d = new Date(exam.startTime);
@@ -282,12 +299,18 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   };
 
   const handleSave = async () => {
-    if (newExam.title && newExam.token) {
+    // If useToken is false, token field can be empty or generic
+    if (newExam.title && (newExam.token || !newExam.useToken)) {
       let startTime = undefined;
       if (scheduleDate && scheduleTime) {
           startTime = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
       }
-      const examData = { ...newExam, startTime };
+      
+      // If no token used, we can set a dummy token or keep it empty depending on DB constraints. 
+      // Assuming DB allows empty if logic handles it, but better to set a dummy if strict.
+      const finalToken = newExam.useToken ? newExam.token : 'NO-TOKEN';
+
+      const examData = { ...newExam, token: finalToken, startTime };
       setLoading(true);
       try {
           if (editingId) await db.updateExam({ ...examData, id: editingId } as Exam);
@@ -295,6 +318,8 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           setIsModalOpen(false);
           onUpdate();
       } catch(e: any) { alert("Gagal menyimpan: " + e.message); } finally { setLoading(false); }
+    } else {
+        alert("Judul dan Token wajib diisi (jika token diaktifkan).");
     }
   };
 
@@ -313,6 +338,7 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           
           setNewExam({
               ...newExam, 
+              title: q.topic || newExam.title, // Auto-fill title from Topic
               googleFormUrl: q.googleFormUrl,
               assignedClasses: classesFromBank
           });
@@ -328,13 +354,31 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
       }
   };
 
-  const handleClassToggle = (className: string) => {
-      // Jika menggunakan link bank soal, disable manual toggle
-      if (isUsingBankLink) return;
+  const handleUrlBlur = async () => {
+      if (!isUsingBankLink && newExam.googleFormUrl && !newExam.title) {
+          setIsFetchingTitle(true);
+          const title = await fetchGoogleFormTitle(newExam.googleFormUrl);
+          if (title) {
+              setNewExam(prev => ({ ...prev, title: title }));
+          }
+          setIsFetchingTitle(false);
+      }
+  };
 
+  const handleClassToggle = (className: string) => {
+      if (isUsingBankLink) return;
       const current = newExam.assignedClasses || [];
       if (current.includes(className)) setNewExam({ ...newExam, assignedClasses: current.filter(c => c !== className) });
       else setNewExam({ ...newExam, assignedClasses: [...current, className] });
+  };
+
+  const generateRandomToken = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid I, 1, O, 0 for clarity
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewExam({...newExam, token: result});
   };
 
   return (
@@ -367,7 +411,11 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
                                 ? <span className="flex items-center gap-1 text-[10px] font-bold uppercase bg-green-100 text-green-700 px-2 py-0.5 rounded-full"><Activity size={10}/> Aktif</span>
                                 : <span className="flex items-center gap-1 text-[10px] font-bold uppercase bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full"><Square size={10}/> Non-Aktif</span>
                             }
-                            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono border border-blue-100">Token: <b>{exam.token}</b></span>
+                            {exam.useToken ? (
+                                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono border border-blue-100">Token: <b>{exam.token}</b></span>
+                            ) : (
+                                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200">Tanpa Token</span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -423,21 +471,33 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
               </div>
               <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-gray-700">Paste URL Google Form</label>
-                  <Input 
-                    value={newExam.googleFormUrl} 
-                    onChange={e => {
-                        setNewExam({...newExam, googleFormUrl: e.target.value});
-                        setIsUsingBankLink(false); // Enable manual class selection if manual url input
-                    }} 
-                    placeholder="https://docs.google.com/forms/..." 
-                    className="text-sm" 
-                  />
+                  <div className="relative">
+                    <Input 
+                        value={newExam.googleFormUrl} 
+                        onChange={e => {
+                            setNewExam({...newExam, googleFormUrl: e.target.value});
+                            setIsUsingBankLink(false); 
+                        }} 
+                        onBlur={handleUrlBlur}
+                        placeholder="https://docs.google.com/forms/..." 
+                        className="text-sm pr-10" 
+                    />
+                    {isFetchingTitle && (
+                        <div className="absolute right-3 top-2.5">
+                            <RefreshCw size={16} className="animate-spin text-blue-500" />
+                        </div>
+                    )}
+                  </div>
               </div>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-gray-700">Judul Ujian</label>
-            <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Contoh: Penilaian Akhir Semester" />
+            <Input 
+                value={newExam.title} 
+                onChange={e => setNewExam({...newExam, title: e.target.value})} 
+                placeholder={isFetchingTitle ? "Mengambil judul..." : "Contoh: Penilaian Akhir Semester"} 
+            />
           </div>
           
           <div className="grid grid-cols-2 gap-4">
@@ -453,19 +513,39 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Token</label>
-                <Input 
-                    value={newExam.token} 
-                    onChange={e => setNewExam({...newExam, token: e.target.value.toUpperCase()})}
-                    placeholder="TOKEN"
-                    className="font-mono uppercase tracking-widest" 
-                />
+                <label className="text-sm font-semibold text-gray-700">Pengaturan Token</label>
+                <div className="flex items-center gap-2 h-[46px]">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <div className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 ${newExam.useToken ? 'bg-blue-600' : 'bg-gray-300'}`} onClick={() => setNewExam({...newExam, useToken: !newExam.useToken})}>
+                            <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ${newExam.useToken ? 'translate-x-4' : ''}`}></div>
+                        </div>
+                        <span className="text-sm font-medium text-gray-600">{newExam.useToken ? 'Token Aktif' : 'Tanpa Token'}</span>
+                    </label>
+                </div>
             </div>
+            
             <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-gray-700">Durasi (Menit)</label>
                 <Input type="number" value={newExam.durationMinutes} onChange={e => setNewExam({...newExam, durationMinutes: parseInt(e.target.value)})} />
             </div>
           </div>
+
+          {newExam.useToken && (
+              <div className="space-y-1.5 animate-fade-in">
+                <label className="text-sm font-semibold text-gray-700">Token Masuk</label>
+                <div className="flex gap-2">
+                    <Input 
+                        value={newExam.token} 
+                        onChange={e => setNewExam({...newExam, token: e.target.value.toUpperCase()})}
+                        placeholder="TOKEN (Min 4 Karakter)"
+                        className="font-mono uppercase tracking-widest" 
+                    />
+                    <Button variant="outline" onClick={generateRandomToken} title="Acak Token" className="px-3">
+                        <RefreshCw size={18} />
+                    </Button>
+                </div>
+              </div>
+          )}
 
           <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700 flex justify-between">
@@ -505,6 +585,7 @@ const QuestionBank: React.FC = () => {
     const [isQModalOpen, setIsQModalOpen] = useState(false);
     const [newQ, setNewQ] = useState<Partial<Question>>({ type: 'EXTERNAL_FORM', topic: '', text: '', googleFormUrl: '' });
     const [loading, setLoading] = useState(false);
+    const [isFetching, setIsFetching] = useState(false);
     const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
 
     const loadData = async () => {
@@ -558,6 +639,17 @@ const QuestionBank: React.FC = () => {
         try { await db.deleteQuestion(id); await loadData(); } catch (e: any) { alert("Error: " + e.message); } finally { setLoading(false); }
     }
 
+    const handleUrlBlur = async () => {
+        if (newQ.googleFormUrl && (!newQ.topic || !newQ.text)) {
+            setIsFetching(true);
+            const title = await fetchGoogleFormTitle(newQ.googleFormUrl);
+            if (title) {
+                setNewQ(prev => ({ ...prev, topic: prev.topic || title }));
+            }
+            setIsFetching(false);
+        }
+    };
+
     return (
         <Card title="Bank Soal (Google Form)" action={<Button onClick={handleOpenModal} size="sm"><Plus size={16}/> Tambah Link</Button>}>
             {loading ? <p className="text-center text-gray-400 py-8">Memuat data...</p> : (
@@ -586,7 +678,32 @@ const QuestionBank: React.FC = () => {
              <Modal isOpen={isQModalOpen} onClose={() => setIsQModalOpen(false)}>
                 <h3 className="font-bold text-lg mb-6 text-gray-800 border-b pb-3">Tambah Link Google Form</h3>
                 <div className="space-y-4">
-                    <div className="space-y-1"><label className="text-sm font-medium text-gray-700">Mata Pelajaran / Topik</label><Input placeholder="Contoh: Bahasa Inggris" value={newQ.topic} onChange={e => setNewQ({...newQ, topic: e.target.value})} /></div>
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">URL Google Form</label>
+                        <div className="relative">
+                            <Input 
+                                placeholder="https://docs.google.com/forms/..." 
+                                value={newQ.googleFormUrl} 
+                                onChange={e => setNewQ({...newQ, googleFormUrl: e.target.value})} 
+                                onBlur={handleUrlBlur}
+                            />
+                            {isFetching && (
+                                <div className="absolute right-3 top-2.5">
+                                    <RefreshCw size={16} className="animate-spin text-blue-500" />
+                                </div>
+                            )}
+                        </div>
+                        <p className="text-xs text-gray-400">Judul form akan otomatis diambil setelah URL diisi.</p>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">Mata Pelajaran / Topik</label>
+                        <Input 
+                            placeholder={isFetching ? "Mengambil otomatis..." : "Contoh: Bahasa Inggris (Otomatis)"} 
+                            value={newQ.topic} 
+                            onChange={e => setNewQ({...newQ, topic: e.target.value})} 
+                        />
+                    </div>
                     
                     <div className="space-y-1">
                         <label className="text-sm font-medium text-gray-700">Pilih Kelas</label>
@@ -606,7 +723,6 @@ const QuestionBank: React.FC = () => {
                         <p className="text-xs text-gray-400 mt-1">Pilih kelas yang dapat mengakses soal ini.</p>
                     </div>
 
-                    <div className="space-y-1"><label className="text-sm font-medium text-gray-700">URL Google Form</label><Input placeholder="https://docs.google.com/forms/..." value={newQ.googleFormUrl} onChange={e => setNewQ({...newQ, googleFormUrl: e.target.value})} /></div>
                     <div className="pt-6 flex justify-end gap-3">
                         <Button variant="outline" onClick={() => setIsQModalOpen(false)}>Batal</Button>
                         <Button onClick={handleAddQuestion} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan'}</Button>

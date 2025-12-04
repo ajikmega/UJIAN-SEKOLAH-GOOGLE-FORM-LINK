@@ -37,6 +37,19 @@ const handleError = (error: any, context: string) => {
     throw new Error(msg || `Gagal memuat data ${context}`);
 };
 
+// Retry utility
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
+    try {
+        return await fn();
+    } catch (err: any) {
+        if (retries > 0 && (err.message.includes("fetch") || err.message.includes("Network"))) {
+            await new Promise(res => setTimeout(res, delay));
+            return withRetry(fn, retries - 1, delay * 2);
+        }
+        throw err;
+    }
+}
+
 const apiDb = {
   // LOGIN
   login: async (identifier: string, credential: string, role: Role): Promise<User | null> => {
@@ -80,13 +93,15 @@ const apiDb = {
 
   // CLASSES
   getClasses: async (): Promise<ClassGroup[]> => {
-    const { data, error } = await supabase
-      .from('classes')
-      .select('*')
-      .order('name', { ascending: true });
-    
-    if (error) handleError(error, 'Kelas');
-    return data || [];
+    return withRetry(async () => {
+        const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .order('name', { ascending: true });
+        
+        if (error) handleError(error, 'Kelas');
+        return data || [];
+    });
   },
   
   addClass: async (name: string) => {
@@ -110,17 +125,19 @@ const apiDb = {
 
   // QUESTIONS (Bank Link Form)
   getQuestions: async (): Promise<Question[]> => {
-    const { data, error } = await supabase
-      .from('questions')
-      .select('id, text, type, topic, google_form_url')
-      .order('text', { ascending: true });
+    return withRetry(async () => {
+        const { data, error } = await supabase
+        .from('questions')
+        .select('id, text, type, topic, google_form_url')
+        .order('text', { ascending: true }); // A-Z Sorting
 
-    if (error) handleError(error, 'Bank Soal');
-    
-    return (data || []).map((q: any) => ({
-      ...q,
-      googleFormUrl: q.google_form_url
-    }));
+        if (error) handleError(error, 'Bank Soal');
+        
+        return (data || []).map((q: any) => ({
+        ...q,
+        googleFormUrl: q.google_form_url
+        }));
+    });
   },
 
   addQuestion: async (q: Question) => {
@@ -150,24 +167,27 @@ const apiDb = {
 
   // EXAMS
   getExams: async (): Promise<Exam[]> => {
-    const { data, error } = await supabase
-      .from('exams')
-      .select('*')
-      .order('created_at', { ascending: false });
+    return withRetry(async () => {
+        const { data, error } = await supabase
+        .from('exams')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) handleError(error, 'Daftar Ujian');
+        if (error) handleError(error, 'Daftar Ujian');
 
-    return (data || []).map((e: any) => ({
-      id: e.id,
-      title: e.title,
-      token: e.token,
-      mode: e.mode,
-      googleFormUrl: e.google_form_url,
-      durationMinutes: e.duration_minutes,
-      startTime: e.start_time,
-      isActive: e.is_active,
-      assignedClasses: e.assigned_classes || [] 
-    }));
+        return (data || []).map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        token: e.token,
+        useToken: e.use_token !== false, // Default true if column missing or null
+        mode: e.mode,
+        googleFormUrl: e.google_form_url,
+        durationMinutes: e.duration_minutes,
+        startTime: e.start_time,
+        isActive: e.is_active,
+        assignedClasses: e.assigned_classes || [] 
+        }));
+    });
   },
 
   addExam: async (exam: Exam) => {
@@ -176,6 +196,7 @@ const apiDb = {
       .insert([{
         title: exam.title,
         token: exam.token,
+        use_token: exam.useToken,
         mode: exam.mode,
         google_form_url: exam.googleFormUrl,
         duration_minutes: exam.durationMinutes,
@@ -192,6 +213,7 @@ const apiDb = {
       .update({
         title: exam.title,
         token: exam.token,
+        use_token: exam.useToken,
         google_form_url: exam.googleFormUrl,
         duration_minutes: exam.durationMinutes,
         start_time: exam.startTime,
@@ -316,21 +338,23 @@ const apiDb = {
   },
 
   getGlobalStats: async () => {
-    const { count: activeExams, error: err1 } = await supabase.from('exams').select('*', { count: 'exact', head: true }).eq('is_active', true);
-    if (err1) handleError(err1, 'Stats Active Exam');
+    return withRetry(async () => {
+        const { count: activeExams, error: err1 } = await supabase.from('exams').select('*', { count: 'exact', head: true }).eq('is_active', true);
+        if (err1) handleError(err1, 'Stats Active Exam');
 
-    const { count: completed, error: err2 } = await supabase.from('results').select('*', { count: 'exact', head: true });
-    if (err2) handleError(err2, 'Stats Completed');
+        const { count: completed, error: err2 } = await supabase.from('results').select('*', { count: 'exact', head: true });
+        if (err2) handleError(err2, 'Stats Completed');
 
-    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    const { count: online, error: err3 } = await supabase.from('sessions').select('*', { count: 'exact', head: true }).gt('last_seen', twoMinutesAgo);
-    if (err3) handleError(err3, 'Stats Online');
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const { count: online, error: err3 } = await supabase.from('sessions').select('*', { count: 'exact', head: true }).gt('last_seen', twoMinutesAgo);
+        if (err3) handleError(err3, 'Stats Online');
 
-    return {
-        activeExams: activeExams || 0,
-        completedStudents: completed || 0,
-        onlineStudents: online || 0
-    };
+        return {
+            activeExams: activeExams || 0,
+            completedStudents: completed || 0,
+            onlineStudents: online || 0
+        };
+    });
   },
 
   // HEARTBEAT
