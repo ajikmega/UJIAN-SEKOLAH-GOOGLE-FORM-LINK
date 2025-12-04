@@ -14,11 +14,17 @@ export interface User {
 
 export type ExamMode = 'GOOGLE_FORM' | 'NATIVE';
 
+export interface SubjectLink {
+  title: string;
+  url: string;
+}
+
 export interface Exam {
   id: string;
   title: string;
   mode: ExamMode;
   googleFormUrl?: string;
+  subjectLinks?: SubjectLink[]; // NEW: Array of subjects for multi-subject session
   examPackageId?: string; // For Native exams
   token: string;
   useToken: boolean; // NEW: Option to enable/disable token

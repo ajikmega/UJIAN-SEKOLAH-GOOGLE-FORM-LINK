@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
-import { Exam, ClassGroup, Question } from '../types';
+import { Exam, ClassGroup, Question, SubjectLink } from '../types';
 import { Button, Input, Card, Modal } from '../components/UI';
 import { Plus, Trash, Play, Square, LogOut, BarChart, Users, Database, Link as LinkIcon, ExternalLink, Home, Activity, UserCheck, Monitor, Calendar, Clock, Edit, Trash2, BookOpen, Eye, Search, Filter, ChevronDown, Info, AlertTriangle, AlertCircle, RefreshCw, Wand2, ToggleRight, CheckSquare } from 'lucide-react';
 
@@ -227,12 +227,14 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newExam, setNewExam] = useState<Partial<Exam>>({ 
-    title: '', token: '', useToken: true, durationMinutes: 60, mode: 'GOOGLE_FORM', googleFormUrl: '', assignedClasses: [] 
+    title: '', token: '', useToken: true, durationMinutes: 60, mode: 'GOOGLE_FORM', googleFormUrl: '', assignedClasses: [], subjectLinks: []
   });
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   
-  const [isUsingBankLink, setIsUsingBankLink] = useState(false);
+  // IsUsingBankLink concept is slightly different now with multi-select, 
+  // but we can assume if subjectLinks > 0, we are using bank.
+  const isUsingBank = (newExam.subjectLinks && newExam.subjectLinks.length > 0) || false;
 
   useEffect(() => {
       if(isModalOpen) {
@@ -270,16 +272,19 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           durationMinutes: 60, 
           mode: 'GOOGLE_FORM', 
           googleFormUrl: '', 
-          assignedClasses: [] 
+          assignedClasses: [],
+          subjectLinks: []
       });
-      setIsUsingBankLink(false);
       setIsModalOpen(true);
   };
 
   const handleOpenEdit = (exam: Exam) => {
       setEditingId(exam.id);
-      setNewExam({...exam, useToken: exam.useToken !== false}); // Ensure boolean
-      setIsUsingBankLink(false);
+      setNewExam({
+          ...exam, 
+          useToken: exam.useToken !== false, 
+          subjectLinks: exam.subjectLinks || [] // Ensure array
+      }); 
 
       if (exam.startTime) {
           const d = new Date(exam.startTime);
@@ -306,10 +311,13 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           startTime = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
       }
       
-      // If no token used, we can set a dummy token or keep it empty depending on DB constraints. 
-      // Assuming DB allows empty if logic handles it, but better to set a dummy if strict.
       const finalToken = newExam.useToken ? newExam.token : 'NO-TOKEN';
 
+      // Ensure single googleFormUrl is set if only 1 subject, or empty if multi?
+      // For compatibility: if subjectLinks > 0, we use that. 
+      // If 1 item in subjectLinks, we can populate googleFormUrl too for backwards compat if needed, 
+      // but StudentExam logic will check subjectLinks first.
+      
       const examData = { ...newExam, token: finalToken, startTime };
       setLoading(true);
       try {
@@ -328,34 +336,47 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
     try { await db.updateExamStatus(id, !current); onUpdate(); } catch (e: any) { alert("Gagal update status: " + e.message); } finally { setLoading(false); }
   };
 
-  const handleSelectFormFromBank = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const qId = e.target.value;
-      const q = formQuestions.find(fq => fq.id === qId);
+  // MULTI SELECT LOGIC
+  const handleToggleBankQuestion = (q: Question) => {
+      const currentSubjects = newExam.subjectLinks || [];
+      const isSelected = currentSubjects.some(s => s.url === q.googleFormUrl);
       
-      if (q && q.googleFormUrl) {
-          // Parse text to get classes. Format expected: "XII-TKJ-1, XII-TKJ-2"
-          const classesFromBank = q.text ? q.text.split(',').map(c => c.trim()).filter(Boolean) : [];
-          
-          setNewExam({
-              ...newExam, 
-              title: q.topic || newExam.title, // Auto-fill title from Topic
-              googleFormUrl: q.googleFormUrl,
-              assignedClasses: classesFromBank
-          });
-          setIsUsingBankLink(true);
+      let updatedSubjects: SubjectLink[];
+      
+      if (isSelected) {
+          updatedSubjects = currentSubjects.filter(s => s.url !== q.googleFormUrl);
       } else {
-          // Reset if deselected
-          setNewExam({
-              ...newExam, 
-              googleFormUrl: '',
-              assignedClasses: []
-          });
-          setIsUsingBankLink(false);
+          updatedSubjects = [...currentSubjects, { title: q.topic, url: q.googleFormUrl || '' }];
       }
+
+      // Update Subjects
+      const updates: Partial<Exam> = { subjectLinks: updatedSubjects };
+
+      // Auto update title if empty or previously auto-set
+      if (updatedSubjects.length === 1 && !newExam.title) {
+          updates.title = updatedSubjects[0].title;
+      }
+
+      // Auto Enroll Classes Logic:
+      // Merge classes from all selected questions
+      const selectedQIds = formQuestions.filter(fq => updatedSubjects.some(us => us.url === fq.googleFormUrl)).map(fq => fq.id);
+      const relevantQuestions = formQuestions.filter(fq => selectedQIds.includes(fq.id));
+      
+      const allClassesSet = new Set<string>();
+      relevantQuestions.forEach(rq => {
+          if (rq.text) {
+              rq.text.split(',').map(c => c.trim()).filter(Boolean).forEach(c => allClassesSet.add(c));
+          }
+      });
+      
+      updates.assignedClasses = Array.from(allClassesSet);
+
+      setNewExam(prev => ({ ...prev, ...updates }));
   };
 
   const handleUrlBlur = async () => {
-      if (!isUsingBankLink && newExam.googleFormUrl && !newExam.title) {
+      // Manual URL behavior
+      if ((!newExam.subjectLinks || newExam.subjectLinks.length === 0) && newExam.googleFormUrl) {
           setIsFetchingTitle(true);
           const title = await fetchGoogleFormTitle(newExam.googleFormUrl);
           if (title) {
@@ -366,7 +387,7 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
   };
 
   const handleClassToggle = (className: string) => {
-      if (isUsingBankLink) return;
+      if (isUsingBank) return; // Disable manual class toggle if using bank items
       const current = newExam.assignedClasses || [];
       if (current.includes(className)) setNewExam({ ...newExam, assignedClasses: current.filter(c => c !== className) });
       else setNewExam({ ...newExam, assignedClasses: [...current, className] });
@@ -416,6 +437,9 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
                             ) : (
                                 <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200">Tanpa Token</span>
                             )}
+                            {exam.subjectLinks && exam.subjectLinks.length > 1 && (
+                                <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-100">{exam.subjectLinks.length} Mapel</span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -456,39 +480,62 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           
           <div className="space-y-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
               <div className="space-y-1.5">
-                  <label className="text-sm font-bold text-blue-800 flex items-center gap-2"><Database size={14}/> Pilih Soal (Bank Link)</label>
-                  <select className="w-full px-3 py-2.5 border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20" onChange={handleSelectFormFromBank}>
-                      <option value="">-- Pilih Link Tersimpan --</option>
-                      {formQuestions.map(q => <option key={q.id} value={q.id}>{q.text} ({q.topic})</option>)}
-                  </select>
+                  <label className="text-sm font-bold text-blue-800 flex items-center gap-2"><Database size={14}/> Pilih Soal dari Bank (Bisa Banyak)</label>
+                  
+                  {/* MULTI SELECT CHECKLIST */}
+                  <div className="grid grid-cols-1 gap-2 border border-blue-200 rounded-lg bg-white p-3 max-h-48 overflow-y-auto custom-scrollbar">
+                      {formQuestions.length === 0 && <p className="text-xs text-gray-400 italic">Tidak ada bank soal tersedia.</p>}
+                      {formQuestions.map(q => {
+                          const isChecked = newExam.subjectLinks?.some(s => s.url === q.googleFormUrl);
+                          return (
+                            <label key={q.id} className={`flex items-center gap-3 p-2 rounded-md transition-colors cursor-pointer border ${isChecked ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50 border-transparent'}`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={isChecked || false} 
+                                    onChange={() => handleToggleBankQuestion(q)}
+                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                />
+                                <div className="flex-1">
+                                    <div className="text-sm font-semibold text-gray-800">{q.topic}</div>
+                                    <div className="text-xs text-gray-500">{q.text}</div>
+                                </div>
+                            </label>
+                          )
+                      })}
+                  </div>
+
                   <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                      <Info size={12}/> Kelas akan otomatis terisi sesuai pengaturan Bank Soal.
+                      <Info size={12}/> Pilih satu atau lebih. Kelas akan otomatis terisi gabungan.
                   </p>
               </div>
-              <div className="relative py-2">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-blue-200"></div></div>
-                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-blue-50 px-2 text-blue-400 font-bold">Atau Input Manual</span></div>
-              </div>
-              <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-700">Paste URL Google Form</label>
-                  <div className="relative">
-                    <Input 
-                        value={newExam.googleFormUrl} 
-                        onChange={e => {
-                            setNewExam({...newExam, googleFormUrl: e.target.value});
-                            setIsUsingBankLink(false); 
-                        }} 
-                        onBlur={handleUrlBlur}
-                        placeholder="https://docs.google.com/forms/..." 
-                        className="text-sm pr-10" 
-                    />
-                    {isFetchingTitle && (
-                        <div className="absolute right-3 top-2.5">
-                            <RefreshCw size={16} className="animate-spin text-blue-500" />
+
+              {!isUsingBank && (
+                  <>
+                    <div className="relative py-2">
+                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-blue-200"></div></div>
+                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-blue-50 px-2 text-blue-400 font-bold">Atau Input Manual</span></div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-gray-700">Paste URL Google Form</label>
+                        <div className="relative">
+                            <Input 
+                                value={newExam.googleFormUrl} 
+                                onChange={e => {
+                                    setNewExam({...newExam, googleFormUrl: e.target.value});
+                                }} 
+                                onBlur={handleUrlBlur}
+                                placeholder="https://docs.google.com/forms/..." 
+                                className="text-sm pr-10" 
+                            />
+                            {isFetchingTitle && (
+                                <div className="absolute right-3 top-2.5">
+                                    <RefreshCw size={16} className="animate-spin text-blue-500" />
+                                </div>
+                            )}
                         </div>
-                    )}
-                  </div>
-              </div>
+                    </div>
+                  </>
+              )}
           </div>
 
           <div className="space-y-1.5">
@@ -550,17 +597,17 @@ const ExamManager: React.FC<{ exams: Exam[], onUpdate: () => void }> = ({ exams,
           <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700 flex justify-between">
                   <span>Enrollment (Peserta Kelas)</span>
-                  {isUsingBankLink && <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Otomatis dari Bank Soal</span>}
+                  {isUsingBank && <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Otomatis dari Bank Soal</span>}
               </label>
-              <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 p-3 rounded-lg max-h-32 overflow-y-auto ${isUsingBankLink ? 'bg-gray-100 opacity-80' : 'bg-gray-50'}`}>
+              <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 p-3 rounded-lg max-h-32 overflow-y-auto ${isUsingBank ? 'bg-gray-100 opacity-80' : 'bg-gray-50'}`}>
                   {availableClasses.map(cls => (
-                      <label key={cls.id} className={`flex items-center gap-2 text-sm p-2 rounded transition-colors ${!isUsingBankLink ? 'cursor-pointer hover:bg-gray-200' : 'cursor-default'} ${newExam.assignedClasses?.includes(cls.name) ? 'bg-blue-100 text-blue-800 font-medium' : ''}`}>
+                      <label key={cls.id} className={`flex items-center gap-2 text-sm p-2 rounded transition-colors ${!isUsingBank ? 'cursor-pointer hover:bg-gray-200' : 'cursor-default'} ${newExam.assignedClasses?.includes(cls.name) ? 'bg-blue-100 text-blue-800 font-medium' : ''}`}>
                           <input 
                             type="checkbox" 
                             checked={newExam.assignedClasses?.includes(cls.name) || false} 
                             onChange={() => handleClassToggle(cls.name)} 
                             className="rounded text-blue-600 focus:ring-blue-500" 
-                            disabled={isUsingBankLink}
+                            disabled={isUsingBank}
                           />
                           {cls.name}
                       </label>

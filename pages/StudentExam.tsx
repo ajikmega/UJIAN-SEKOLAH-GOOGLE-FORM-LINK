@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService';
 import { User, Exam, Question } from '../types';
 import { Button, Card, Modal, Input } from '../components/UI';
-import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, CloudUpload, ArrowRight } from 'lucide-react';
+import { Clock, CheckCircle, ChevronRight, ChevronLeft, Calendar, Play, RefreshCw, Key, LogOut, LayoutGrid, BookOpen, CloudUpload, ArrowRight, ExternalLink } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -38,6 +38,8 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
   const [inputToken, setInputToken] = useState('');
   const [tokenError, setTokenError] = useState('');
   const [isStarting, setIsStarting] = useState(false);
+  const [sessionSubjects, setSessionSubjects] = useState<{title: string, url: string}[]>([]); // NEW
+  const [showSubjectSelection, setShowSubjectSelection] = useState(false); // NEW
 
   useEffect(() => {
     // Initial Heartbeat
@@ -97,16 +99,20 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     if (!selectedExam.useToken || inputToken.toUpperCase() === selectedExam.token) {
         setIsStarting(true);
         
-        // 1. REKAM KEHADIRAN (Attendance) -> DIHAPUS (Tidak menyimpan ke DB)
-        
-        // 2. PROSES SESUAI MODE
-        if (selectedExam.mode === 'GOOGLE_FORM' && selectedExam.googleFormUrl) {
-            // MODE GOOGLE FORM: Redirect Langsung (Landing Page)
-            // Tanpa Iframe, Tanpa Timer, Tanpa Tombol Selesai di App
-            // Menggunakan window.open untuk membuka di tab baru
-            window.open(selectedExam.googleFormUrl, '_blank');
+        // CEK APAKAH INI SESI MULTI-MAPEL?
+        if (selectedExam.subjectLinks && selectedExam.subjectLinks.length > 0) {
+            // JIKA ADA BANYAK MAPEL -> TAMPILKAN PILIHAN
+            setSessionSubjects(selectedExam.subjectLinks);
+            setShowSubjectSelection(true);
+            setIsStarting(false);
             
-            // Reset state lokal (fallback jika user kembali/back)
+            // Kita set activeExam sementara sebagai container sesi
+            const examState = { ...selectedExam, _studentUser: user.username };
+            setActiveExam(examState); 
+            setSelectedExam(null);
+        } else if (selectedExam.mode === 'GOOGLE_FORM' && selectedExam.googleFormUrl) {
+            // MODE GOOGLE FORM (SINGLE LEGACY): Redirect Langsung
+            window.open(selectedExam.googleFormUrl, '_blank');
             setSelectedExam(null);
             setIsStarting(false);
         } else {
@@ -125,6 +131,11 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
     } else { 
         setTokenError('Token tidak valid!'); 
     }
+  };
+
+  // NEW: Handle click subject in multi-mode
+  const handleOpenSubject = (url: string) => {
+      window.open(url, '_blank');
   };
 
   const handleFinish = async (score: number = 0, status: 'COMPLETED' | 'CHEATING_SUSPECTED' = 'COMPLETED') => {
@@ -166,6 +177,51 @@ export const StudentExam: React.FC<Props> = ({ user, onLogout }) => {
         <p className="text-gray-400 text-sm mt-8 font-medium">SMK Muhammadiyah Kalibawang &copy; 2025</p>
       </div>
     );
+  }
+
+  // RENDER SUBJECT SELECTION IF ACTIVE AND HAS MULTIPLE SUBJECTS
+  if (activeExam && activeExam.subjectLinks && activeExam.subjectLinks.length > 0) {
+      return (
+        <div className="min-h-screen bg-gray-50 font-sans flex flex-col">
+            {/* Header Sederhana */}
+            <header className="bg-white border-b border-gray-200 p-4 shadow-sm sticky top-0 z-10">
+                <div className="container mx-auto flex justify-between items-center">
+                    <div>
+                        <h1 className="font-bold text-lg text-gray-800">{activeExam.title}</h1>
+                        <p className="text-sm text-gray-500">Silakan pilih mata pelajaran yang ingin dikerjakan.</p>
+                    </div>
+                    <Button onClick={() => setActiveExam(null)} variant="outline" className="text-sm">
+                        <ArrowRight size={16} className="rotate-180" /> Kembali
+                    </Button>
+                </div>
+            </header>
+
+            <div className="flex-1 container mx-auto p-6 flex flex-col items-center justify-center animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-4xl">
+                    {activeExam.subjectLinks.map((subj, idx) => (
+                        <div key={idx} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col gap-4 group cursor-pointer" onClick={() => handleOpenSubject(subj.url)}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                                    {idx + 1}
+                                </div>
+                                <h3 className="font-bold text-lg text-gray-800">{subj.title}</h3>
+                            </div>
+                            <Button className="w-full justify-between bg-white text-blue-600 border border-blue-100 hover:bg-blue-50 shadow-none">
+                                Buka Soal <ExternalLink size={16} className="group-hover:translate-x-1 transition-transform"/>
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+                
+                <div className="mt-12 text-center">
+                    <p className="text-gray-400 text-sm mb-4">Jika sudah selesai semua mata pelajaran:</p>
+                    <Button onClick={() => handleFinish()} variant="danger" className="mx-auto flex items-center gap-2">
+                        <LogOut size={16} /> Selesaikan Sesi Ujian
+                    </Button>
+                </div>
+            </div>
+        </div>
+      );
   }
 
   if (activeExam) return <ExamRoom exam={activeExam} user={user} onFinish={handleFinish} />;
@@ -326,8 +382,6 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
       localStorage.setItem(`exambit_q_index_${exam.id}`, currentQIndex.toString());
   }, [currentQIndex, exam.id]);
 
-  // AUTO SAVE DIHAPUS
-
   useEffect(() => {
     const loadQuestions = async () => {
         if(exam.mode === 'NATIVE' && exam.examPackageId) {
@@ -470,7 +524,7 @@ const ExamRoom: React.FC<{ exam: Exam; user: User; onFinish: (score?: number, st
               <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6"><LayoutGrid size={40} /></div>
               <h3 className="text-2xl font-bold text-gray-800 mb-2">Selesaikan Ujian?</h3>
               <p className="text-gray-500 mb-8 max-w-xs mx-auto">
-                 Periksa kembali jawaban Anda. Setelah selesai, Anda tidak dapat mengubah jawaban lagi.
+                 Pastikan Anda telah menekan tombol KIRIM di dalam Google Form sebelum mengakhiri sesi ini
               </p>
               <div className="flex gap-4">
                   <Button variant="outline" className="flex-1 py-3" onClick={() => setShowConfirmFinish(false)}>Batal</Button>

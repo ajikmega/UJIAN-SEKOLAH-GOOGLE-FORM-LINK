@@ -179,9 +179,10 @@ const apiDb = {
         id: e.id,
         title: e.title,
         token: e.token,
-        useToken: e.use_token !== false, // Default true if column missing or null
+        useToken: e.use_token !== false, // Default true
         mode: e.mode,
         googleFormUrl: e.google_form_url,
+        subjectLinks: e.subject_links || [], // NEW: Multi subject links
         durationMinutes: e.duration_minutes,
         startTime: e.start_time,
         isActive: e.is_active,
@@ -199,6 +200,7 @@ const apiDb = {
         use_token: exam.useToken,
         mode: exam.mode,
         google_form_url: exam.googleFormUrl,
+        subject_links: exam.subjectLinks, // NEW
         duration_minutes: exam.durationMinutes,
         start_time: exam.startTime,
         assigned_classes: exam.assignedClasses,
@@ -215,6 +217,7 @@ const apiDb = {
         token: exam.token,
         use_token: exam.useToken,
         google_form_url: exam.googleFormUrl,
+        subject_links: exam.subjectLinks, // NEW
         duration_minutes: exam.durationMinutes,
         start_time: exam.startTime,
         assigned_classes: exam.assignedClasses
